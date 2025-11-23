@@ -1,0 +1,128 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 1869 >>
+stream
+BT
+/F1 10 Tf
+50 750 Td
+(MITAS TRACKER - PROJECT REPORT) Tj
+0 -14 Td
+(==================================================) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(PROJECT INFORMATION) Tj
+0 -14 Td
+(--------------------------------------------------) Tj
+0 -14 Td
+(Project Name: Alpla) Tj
+0 -14 Td
+(Owner: Katleho Mokoena) Tj
+0 -14 Td
+(Status: IN_PROGRESS) Tj
+0 -14 Td
+(Active Zone: On Track \(Green\)) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(MILESTONES) Tj
+0 -14 Td
+(--------------------------------------------------) Tj
+0 -14 Td
+(No milestones defined) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(COSTS BREAKDOWN) Tj
+0 -14 Td
+(--------------------------------------------------) Tj
+0 -14 Td
+(Scope Cost: 17000.00) Tj
+0 -14 Td
+(Current Cost: 6500.00) Tj
+0 -14 Td
+(Actual Cost \(Payments\): 5000.00) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(Cost Items:) Tj
+0 -14 Td
+(Category                     Amount) Tj
+0 -14 Td
+(-----------------------------------) Tj
+0 -14 Td
+(scoping                     7000.00) Tj
+0 -14 Td
+(training                    6500.00) Tj
+0 -14 Td
+(scoping                    10000.00) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(APPROVALS) Tj
+0 -14 Td
+(--------------------------------------------------) Tj
+0 -14 Td
+(1. Phase: SCOPING_VALIDATION) Tj
+0 -14 Td
+(   Status: APPROVED) Tj
+0 -14 Td
+(   Requested By: Katleho Mokoena) Tj
+0 -14 Td
+(   Decided By: Katleho Mokoena) Tj
+0 -14 Td
+(   Decided: 2025/11/06) Tj
+0 -14 Td
+(   Comment: Yes) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(2. Phase: SCOPING_VALIDATION) Tj
+0 -14 Td
+(   Status: PENDING) Tj
+0 -14 Td
+(   Requested By: Katleho Mokoena) Tj
+0 -14 Td
+(   Comment: Departments: cmhndo7g3004vfo8df2elt609) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(JOB CARDS) Tj
+0 -14 Td
+(--------------------------------------------------) Tj
+0 -14 Td
+(No job cards generated) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(==================================================) Tj
+0 -14 Td
+(Report Generated: 2025/11/06, 14:30:02) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000241 00000 n 
+0000002162 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+2361
+%%EOF

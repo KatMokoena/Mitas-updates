@@ -1,0 +1,106 @@
+{
+  "name": "mitas-ipmp",
+  "version": "1.0.0",
+  "description": "Mitas Internal Project Management Platform",
+  "main": "server.js",
+  "scripts": {
+    "build": "npm run build:server && npm run build:renderer",
+    "build:server": "tsc --project tsconfig.server.json",
+    "build:renderer": "webpack --config webpack.renderer.config.js --mode production",
+    "start": "cross-env NODE_ENV=production node dist/server.js",
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:renderer\"",
+    "dev:server": "cross-env PORT=3001 ts-node-dev --respawn --transpile-only server.ts",
+    "dev:server:prod": "cross-env NODE_ENV=production PORT=3000 ts-node-dev --respawn --transpile-only server.ts",
+    "dev:renderer": "webpack serve --config webpack.renderer.config.js",
+    "build:prod": "npm run build && npm start",
+    "dev:prod": "cross-env NODE_ENV=production PORT=3000 concurrently \"npm run dev:server\" \"npm run dev:renderer\"",
+    "test:email": "ts-node-dev --transpile-only test-email.ts"
+  },
+  "keywords": [
+    "project-management",
+    "gantt",
+    "timeline"
+  ],
+  "author": "Mitas",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^4.17.21",
+    "@types/jspdf": "^1.3.3",
+    "@types/node": "^20.19.25",
+    "@types/react": "^18.2.43",
+    "@types/react-dom": "^18.2.17",
+    "@types/uuid": "^9.0.7",
+    "concurrently": "^8.2.2",
+    "cross-env": "^10.1.0",
+    "css-loader": "^6.8.1",
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1",
+    "html-webpack-plugin": "^5.6.0",
+    "style-loader": "^3.3.3",
+    "ts-loader": "^9.5.1",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.3.3",
+    "wait-on": "^7.2.0",
+    "webpack": "^5.89.0",
+    "webpack-cli": "^5.1.4",
+    "webpack-dev-server": "^4.15.1"
+  },
+  "dependencies": {
+    "@types/node-cron": "^3.0.11",
+    "@types/nodemailer": "^7.0.4",
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^9.2.2",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "electron-updater": "^6.1.7",
+    "express": "^4.18.2",
+    "frappe-gantt": "^0.6.1",
+    "jspdf": "^3.0.3",
+    "jspdf-autotable": "^5.0.2",
+    "node-cron": "^4.2.1",
+    "nodemailer": "^7.0.10",
+    "process": "^0.11.10",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.21.1",
+    "recharts": "^3.4.1",
+    "reflect-metadata": "^0.1.13",
+    "typeorm": "^0.3.17",
+    "uuid": "^9.0.1"
+  },
+  "build": {
+    "appId": "com.mitas.ipmp",
+    "productName": "Mitas IPMP",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "publish": {
+      "provider": "generic",
+      "url": "https://your-update-server.com/updates/"
+    }
+  }
+}

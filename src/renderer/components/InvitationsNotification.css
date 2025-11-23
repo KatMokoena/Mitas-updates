@@ -1,0 +1,208 @@
+.invitations-notification {
+  position: relative;
+  z-index: 1001;
+  margin-bottom: 0.5rem;
+}
+
+.invitations-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.3);
+  z-index: 9999;
+  backdrop-filter: blur(2px);
+}
+
+.invitations-bell {
+  position: relative;
+  background: rgba(27, 42, 65, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  font-size: 1.25rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: #f1f5f9;
+  width: 100%;
+  text-align: center;
+}
+
+.invitations-bell:hover {
+  background: rgba(27, 42, 65, 0.8);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.invitations-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: #E74C3C;
+  color: white;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.invitations-dropdown {
+  position: fixed;
+  bottom: 140px;
+  left: 20px;
+  background: #1B2A41;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  width: 400px;
+  max-height: calc(100vh - 220px);
+  min-height: 200px;
+  z-index: 10000;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.invitations-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.invitations-header h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: #f1f5f9;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.close-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #f1f5f9;
+}
+
+.invitations-list {
+  max-height: calc(60vh - 80px);
+  overflow-y: auto;
+  flex: 1;
+}
+
+.invitation-item {
+  padding: 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  transition: background-color 0.2s ease;
+}
+
+.invitation-item:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.invitation-item:last-child {
+  border-bottom: none;
+}
+
+.invitation-info {
+  margin-bottom: 0.75rem;
+  color: #f1f5f9;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.invitation-info strong {
+  color: #3498DB;
+}
+
+.invitation-message {
+  margin: 0.5rem 0 0 0;
+  padding: 0.5rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.invitation-link {
+  display: inline-block;
+  margin-top: 0.5rem;
+  color: #3498DB;
+  text-decoration: none;
+  font-size: 0.875rem;
+  transition: color 0.2s ease;
+}
+
+.invitation-link:hover {
+  color: #5DADE2;
+  text-decoration: underline;
+}
+
+.invitation-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btn-accept,
+.btn-reject {
+  flex: 1;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-accept {
+  background: #2ECC71;
+  color: white;
+}
+
+.btn-accept:hover {
+  background: #27AE60;
+  transform: translateY(-1px);
+}
+
+.btn-reject {
+  background: rgba(231, 76, 60, 0.2);
+  color: #E74C3C;
+  border: 1px solid #E74C3C;
+}
+
+.btn-reject:hover {
+  background: rgba(231, 76, 60, 0.3);
+  transform: translateY(-1px);
+}
+
+.btn-secondary {
+  background: rgba(108, 117, 125, 0.2);
+  color: #94a3b8;
+  border: 1px solid rgba(108, 117, 125, 0.3);
+}
+
+.btn-secondary:hover {
+  background: rgba(108, 117, 125, 0.3);
+  color: #f1f5f9;
+  transform: translateY(-1px);
+}
+

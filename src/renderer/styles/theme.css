@@ -1,0 +1,425 @@
+/* ============================================
+   MITAS IPMP - GLOBAL THEME & DESIGN TOKENS
+   ============================================ */
+
+:root {
+  /* Background Gradients - Matching Login Page */
+  --bg-gradient: 
+    linear-gradient(135deg, rgba(44, 62, 80, 0.85) 0%, rgba(52, 73, 94, 0.88) 50%, rgba(26, 37, 47, 0.9) 100%),
+    url('data:image/svg+xml,<svg width="100" height="100" xmlns="http://www.w3.org/2000/svg"><defs><pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(255,255,255,0.03)" stroke-width="1"/></pattern></defs><rect width="100" height="100" fill="url(%23grid)"/></svg>');
+  --bg-overlay-glow-cyan: radial-gradient(circle at 20% 30%, rgba(59, 130, 246, 0.08) 0%, transparent 50%);
+  --bg-overlay-glow-orange: radial-gradient(circle at 80% 70%, rgba(249, 115, 22, 0.06) 0%, transparent 50%);
+  
+  /* Panel Backgrounds (Glassmorphism) */
+  --panel-bg: rgba(15, 23, 42, 0.92);
+  --panel-glass: rgba(15, 23, 42, 0.78);
+  --panel-glass-light: rgba(30, 41, 59, 0.65);
+  --sidebar-bg: rgba(15, 23, 42, 0.95);
+  
+  /* Accent Colors */
+  --accent: #f97316; /* Primary MITAS orange */
+  --accent-soft: rgba(249, 115, 22, 0.12);
+  --accent-hover: #fb923c;
+  --accent-blue: #3b82f6; /* Secondary / focus / links */
+  --accent-blue-soft: rgba(59, 130, 246, 0.15);
+  
+  /* Text Colors */
+  --text-main: #e5e7eb;
+  --text-muted: #9ca3af;
+  --text-subtle: #6b7280;
+  --text-inverse: #020617;
+  
+  /* Status Colors */
+  --status-success: #10b981;
+  --status-success-soft: rgba(16, 185, 129, 0.15);
+  --status-warning: #f59e0b;
+  --status-warning-soft: rgba(245, 158, 11, 0.15);
+  --status-danger: #ef4444;
+  --status-danger-soft: rgba(239, 68, 68, 0.15);
+  --status-info: #3b82f6;
+  --status-info-soft: rgba(59, 130, 246, 0.15);
+  
+  /* Borders & Shadows */
+  --border-subtle: rgba(148, 163, 184, 0.2);
+  --border-medium: rgba(148, 163, 184, 0.35);
+  --border-strong: rgba(148, 163, 184, 0.5);
+  --shadow-soft: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
+  --shadow-medium: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -2px rgba(0, 0, 0, 0.3);
+  --shadow-strong: 0 22px 50px rgba(0, 0, 0, 0.75);
+  --shadow-glow-orange: 0 0 20px rgba(249, 115, 22, 0.3);
+  --shadow-glow-blue: 0 0 20px rgba(59, 130, 246, 0.3);
+  --shadow-inset: inset 0 2px 4px rgba(0, 0, 0, 0.3);
+  
+  /* Border Radius */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --radius-pill: 9999px;
+  
+  /* Spacing */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  --spacing-2xl: 48px;
+  
+  /* Transitions */
+  --transition-fast: 0.15s ease;
+  --transition-base: 0.2s ease;
+  --transition-slow: 0.3s ease;
+}
+
+/* ============================================
+   BASE STYLES
+   ============================================ */
+
+body {
+  background: var(--bg-gradient);
+  background-attachment: fixed;
+  color: var(--text-main);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'SF Pro Display', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* Page Transition Animation */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Card Entrance Animation */
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Stagger Animation for Lists */
+@keyframes staggerFadeIn {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Typography */
+h1, h2, h3, h4, h5, h6 {
+  color: var(--text-main);
+  font-weight: 600;
+  line-height: 1.2;
+  margin: 0;
+}
+
+h1 {
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+
+h2 {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+}
+
+h3 {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+/* ============================================
+   SHARED COMPONENTS
+   ============================================ */
+
+/* Glass Card */
+.glass-card {
+  background: var(--panel-glass);
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-medium);
+  transition: all var(--transition-base);
+  animation: slideInUp 0.4s ease-out;
+}
+
+.glass-card:hover {
+  border-color: var(--border-medium);
+  box-shadow: var(--shadow-strong);
+  transform: translateY(-2px);
+}
+
+/* Glass Panel (darker) */
+.glass-panel {
+  background: var(--panel-bg);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-soft);
+}
+
+/* Status Pills */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: white;
+}
+
+.status-pill.success {
+  background: var(--status-success);
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.3);
+}
+
+.status-pill.warning {
+  background: var(--status-warning);
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.3);
+}
+
+.status-pill.danger {
+  background: var(--status-danger);
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.3);
+}
+
+.status-pill.info {
+  background: var(--status-info);
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 20px;
+  border: none;
+  border-radius: var(--radius-pill);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-base);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent) 0%, #ea580c 100%);
+  color: white;
+  box-shadow: var(--shadow-glow-orange), var(--shadow-medium);
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, var(--accent-hover) 0%, var(--accent) 100%);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-glow-orange), var(--shadow-strong);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+.btn-secondary {
+  background: var(--panel-glass);
+  color: var(--text-main);
+  border: 1px solid var(--border-medium);
+}
+
+.btn-secondary:hover {
+  background: var(--panel-bg);
+  border-color: var(--border-strong);
+}
+
+.btn-danger {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  color: white;
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4);
+}
+
+.btn-danger:hover {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(220, 38, 38, 0.5);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
+}
+
+.btn-ghost:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Inputs & Selects */
+.input,
+.select {
+  width: 100%;
+  padding: 10px 14px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-pill);
+  color: var(--text-main);
+  font-size: 14px;
+  transition: all var(--transition-base);
+  box-shadow: var(--shadow-inset);
+}
+
+.input:focus,
+.select:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+  box-shadow: var(--shadow-inset), 0 0 0 3px var(--accent-blue-soft), var(--shadow-glow-blue);
+  background: rgba(15, 23, 42, 0.8);
+}
+
+.input::placeholder {
+  color: var(--text-subtle);
+}
+
+/* Labels */
+.label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  margin-bottom: var(--spacing-sm);
+}
+
+/* Tables */
+.table-container {
+  background: var(--panel-glass);
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-medium);
+  overflow: hidden;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table thead {
+  background: rgba(15, 23, 42, 0.8);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.table th {
+  padding: 14px 16px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+}
+
+.table tbody tr {
+  border-bottom: 1px solid var(--border-subtle);
+  transition: all var(--transition-base);
+}
+
+.table tbody tr:hover {
+  background: rgba(30, 41, 59, 0.4);
+  transform: scale(1.01);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.table tbody tr:last-child {
+  border-bottom: none;
+}
+
+.table td {
+  padding: 14px 16px;
+  color: var(--text-main);
+  font-size: 14px;
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.5);
+  border-radius: var(--radius-pill);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.4);
+  border-radius: var(--radius-pill);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.6);
+  background-clip: padding-box;
+}
+
+/* Focus States (Accessibility) */
+*:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Utility Classes */
+.text-muted {
+  color: var(--text-muted);
+}
+
+.text-subtle {
+  color: var(--text-subtle);
+}
+
+.text-success {
+  color: var(--status-success);
+}
+
+.text-warning {
+  color: var(--status-warning);
+}
+
+.text-danger {
+  color: var(--status-danger);
+}
+
+.text-accent {
+  color: var(--accent);
+}
+

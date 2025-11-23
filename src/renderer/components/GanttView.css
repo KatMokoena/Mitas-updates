@@ -1,0 +1,255 @@
+.gantt-view {
+  padding: 30px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.gantt-header-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.gantt-header-controls h1 {
+  font-size: 28px;
+  color: #333;
+}
+
+.project-selector {
+  padding: 8px 16px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.gantt-container {
+  flex: 1;
+  overflow: auto;
+  background: white;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.gantt-empty {
+  text-align: center;
+  padding: 60px;
+  color: #7f8c8d;
+  font-size: 16px;
+}
+
+.gantt-chart {
+  min-width: 100%;
+}
+
+.gantt-header {
+  display: flex;
+  border-bottom: 2px solid #3498db;
+  margin-bottom: 12px;
+  position: sticky;
+  top: 0;
+  background: white;
+  z-index: 10;
+}
+
+.gantt-task-column {
+  width: 200px;
+  padding: 12px;
+  font-weight: 600;
+  color: #2c3e50;
+  border-right: 1px solid #ddd;
+}
+
+.gantt-timeline {
+  display: flex;
+  padding: 12px 0;
+}
+
+.gantt-date-header {
+  flex: 1;
+  text-align: center;
+  font-size: 12px;
+  color: #7f8c8d;
+  min-width: 20px;
+}
+
+.gantt-row {
+  display: flex;
+  margin-bottom: 8px;
+  min-height: 40px;
+  align-items: center;
+}
+
+.gantt-task-name {
+  width: 200px;
+  padding: 8px 12px;
+  border-right: 1px solid #eee;
+  font-size: 14px;
+  color: #2c3e50;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gantt-bar-container {
+  flex: 1;
+  position: relative;
+  height: 32px;
+  background: #f8f9fa;
+  border-radius: 4px;
+  min-width: 800px;
+}
+
+.gantt-bar {
+  position: absolute;
+  height: 24px;
+  top: 4px;
+  background: #3498db;
+  border-radius: 4px;
+  cursor: move;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  color: white;
+  font-size: 11px;
+  font-weight: 600;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: opacity 0.2s;
+}
+
+.gantt-bar:hover {
+  opacity: 0.8;
+}
+
+.gantt-bar.dragging {
+  opacity: 0.5;
+  z-index: 100;
+}
+
+.gantt-bar.milestone {
+  background: #f39c12;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+}
+
+.gantt-bar.completed {
+  background: #27ae60;
+}
+
+.gantt-progress {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+}
+
+.gantt-loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  font-size: 18px;
+  color: #7f8c8d;
+}
+
+.gantt-info {
+  font-size: 12px;
+  color: #7f8c8d;
+  padding: 8px 12px;
+  background: #f8f9fa;
+  border-radius: 4px;
+}
+
+.task-name-text {
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+
+.task-assignee-select {
+  width: 100%;
+  padding: 4px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 12px;
+  background: white;
+  cursor: pointer;
+}
+
+.task-assignee-select:hover {
+  border-color: #3498db;
+}
+
+.gantt-bar-label {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 90%;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.gantt-resize-handle {
+  position: absolute;
+  top: 0;
+  width: 8px;
+  height: 100%;
+  cursor: ew-resize;
+  z-index: 10;
+  background: rgba(255, 255, 255, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  transition: background 0.2s;
+}
+
+.gantt-resize-handle:hover {
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.gantt-resize-left {
+  left: 0;
+  border-radius: 4px 0 0 4px;
+}
+
+.gantt-resize-right {
+  right: 0;
+  border-radius: 0 4px 4px 0;
+}
+
+.gantt-bar {
+  position: relative;
+}
+
+.gantt-bar.dragging {
+  opacity: 0.6;
+  z-index: 100;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.gantt-bar.resizing {
+  opacity: 0.8;
+  z-index: 100;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.gantt-bar.updating {
+  opacity: 0.7;
+  animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 0.7;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+

@@ -1,0 +1,266 @@
+/* ============================================
+   ORDERS PAGE
+   ============================================ */
+
+.orders {
+  padding: var(--spacing-xl);
+  min-height: 100vh;
+  max-width: 1600px;
+  margin: 0 auto;
+  animation: fadeIn 0.5s ease-out;
+}
+
+.orders-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-xl);
+}
+
+.orders-header h1 {
+  font-size: 32px;
+  color: var(--text-main);
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  margin: 0;
+}
+
+.department-group {
+  margin-bottom: var(--spacing-xl);
+}
+
+.department-header {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-main);
+  margin: 0 0 var(--spacing-md) 0;
+  padding-bottom: var(--spacing-sm);
+  border-bottom: 2px solid var(--border-medium);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.department-header::before {
+  content: '';
+  width: 4px;
+  height: 24px;
+  background: linear-gradient(135deg, var(--accent) 0%, #ea580c 100%);
+  border-radius: var(--radius-sm);
+}
+
+.orders-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+  gap: var(--spacing-lg);
+}
+
+.order-card-wrapper {
+  position: relative;
+}
+
+.order-card {
+  background: var(--panel-glass);
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-lg);
+  box-shadow: var(--shadow-medium);
+  text-decoration: none;
+  color: inherit;
+  transition: all var(--transition-base);
+  display: block;
+  position: relative;
+  overflow: hidden;
+  animation: slideInUp 0.4s ease-out;
+}
+
+.order-card:nth-child(1) {
+  animation-delay: 0.1s;
+}
+
+.order-card:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.order-card:nth-child(3) {
+  animation-delay: 0.2s;
+}
+
+.order-card:nth-child(4) {
+  animation-delay: 0.25s;
+}
+
+.order-card:nth-child(n+5) {
+  animation-delay: 0.3s;
+}
+
+.order-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent) 0%, transparent 100%);
+  opacity: 0;
+  transition: opacity var(--transition-base);
+}
+
+.order-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-strong);
+  border-color: var(--border-medium);
+}
+
+.order-card:hover::before {
+  opacity: 1;
+}
+
+.order-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  margin-bottom: var(--spacing-md);
+}
+
+.order-card-header h2 {
+  font-size: 20px;
+  color: var(--text-main);
+  margin: 0 0 var(--spacing-xs) 0;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+}
+
+.order-customer {
+  color: var(--text-muted);
+  font-size: 14px;
+  margin: 0;
+  font-weight: 500;
+}
+
+.order-badges {
+  display: flex;
+  gap: var(--spacing-sm);
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.status-badge,
+.priority-badge,
+.timeline-status-badge {
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  font-size: 10px;
+  font-weight: 700;
+  color: white;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.order-description {
+  color: var(--text-muted);
+  font-size: 14px;
+  margin: var(--spacing-md) 0;
+  line-height: 1.6;
+}
+
+.order-timeline-info {
+  margin-top: var(--spacing-md);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--border-subtle);
+  font-size: 13px;
+}
+
+.deadline-info {
+  margin-bottom: var(--spacing-sm);
+  color: var(--text-main);
+}
+
+.deadline-info strong {
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.overdue {
+  color: var(--status-danger);
+  font-weight: 600;
+}
+
+.timeline-status {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  margin-top: var(--spacing-sm);
+}
+
+.days-remaining {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.orders-loading,
+.empty-state {
+  text-align: center;
+  padding: var(--spacing-2xl);
+  color: var(--text-muted);
+  font-size: 16px;
+  background: var(--panel-glass);
+  border-radius: var(--radius-lg);
+  border: 1px dashed var(--border-subtle);
+}
+
+.order-delete-btn {
+  position: absolute;
+  bottom: var(--spacing-md);
+  right: var(--spacing-md);
+  padding: 8px 16px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  color: white;
+  border: none;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(220, 38, 38, 0.3);
+  transition: all var(--transition-base);
+  z-index: 10;
+  opacity: 0;
+  transform: translateY(4px);
+}
+
+.order-card-wrapper:hover .order-delete-btn {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.order-delete-btn:hover {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4);
+}
+
+.order-delete-btn:active {
+  transform: translateY(0);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .orders-list {
+    grid-template-columns: 1fr;
+  }
+  
+  .order-delete-btn {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
