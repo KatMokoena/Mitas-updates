@@ -12,6 +12,8 @@ import configurationsRoutes from './routes/configurations';
 import emailRoutes, { setEmailService } from './routes/email';
 import invitationsRoutes from './routes/invitations';
 import requisitionsRoutes from './routes/requisitions';
+import timeTrackingRoutes from './routes/timeTracking';
+import cliftonStrengthsRoutes from './routes/cliftonStrengths';
 
 export const apiRouter = express.Router();
 
@@ -32,6 +34,8 @@ apiRouter.use('/configurations', configurationsRoutes);
 apiRouter.use('/email', emailRoutes);
 apiRouter.use('/invitations', invitationsRoutes);
 apiRouter.use('/requisitions', requisitionsRoutes);
+apiRouter.use('/time-tracking', timeTrackingRoutes);
+apiRouter.use('/clifton-strengths', cliftonStrengthsRoutes);
 
 // Health check endpoint
 apiRouter.get('/health', (req, res) => {

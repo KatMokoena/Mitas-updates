@@ -161,6 +161,7 @@ const Dashboard: React.FC = () => {
 
       if (response.ok) {
         const data = await response.json();
+        // Backend now returns all orders - no department restrictions
         setOrders(data);
       }
     } catch (error) {
@@ -335,16 +336,24 @@ const Dashboard: React.FC = () => {
     
     orders.forEach((order) => {
       const orderTasks = tasks.filter((t) => t.orderId === order.id);
-      if (orderTasks.length === 0) {
-        // Order with no tasks - neutral weight
-        totalWeight += 1;
-        return;
-      }
-      
       const deadline = new Date(order.deadline);
       const isOverdue = deadline < now && order.status !== OrderStatus.COMPLETED;
       const isCompleted = order.status === OrderStatus.COMPLETED;
       const timelineStatus = timelineStatuses.get(order.id);
+      
+      if (orderTasks.length === 0) {
+        // Order with no tasks - use status-based scoring
+        if (isCompleted) {
+          healthScore += 1.0;
+        } else if (isOverdue) {
+          healthScore += 0.2;
+        } else {
+          // Pending/active order with no tasks - neutral score
+          healthScore += 0.5;
+        }
+        totalWeight += 1;
+        return;
+      }
       
       // Calculate task completion rate
       const completedTasks = orderTasks.filter((t) => t.status === TaskStatus.COMPLETED).length;
@@ -358,12 +367,26 @@ const Dashboard: React.FC = () => {
       }).length;
       const onTimeRate = orderTasks.length > 0 ? onTimeTasks / orderTasks.length : 0;
       
-      // Calculate risk factor
-      let riskFactor = 0;
+      // Calculate risk factor - use timeline status if available, otherwise estimate from deadline
+      let riskFactor = 0.5; // Default to neutral if timeline not available
       if (timelineStatus) {
-        if (timelineStatus.status === 'late') riskFactor = 0;
-        else if (timelineStatus.status === 'at_risk') riskFactor = 0.5;
-        else if (timelineStatus.status === 'on_track') riskFactor = 1;
+        if (timelineStatus.status === 'late') {
+          riskFactor = 0;
+        } else if (timelineStatus.status === 'at_risk') {
+          riskFactor = 0.5;
+        } else if (timelineStatus.status === 'on_track') {
+          riskFactor = 1.0;
+        }
+      } else {
+        // Estimate risk factor from deadline if timeline not available
+        const daysUntilDeadline = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        if (isOverdue) {
+          riskFactor = 0;
+        } else if (daysUntilDeadline < 7) {
+          riskFactor = 0.5; // At risk if less than 7 days
+        } else {
+          riskFactor = 1.0; // On track if more than 7 days
+        }
       }
       
       // Calculate order score
@@ -371,7 +394,8 @@ const Dashboard: React.FC = () => {
       if (isCompleted) {
         orderScore = 1.0; // Completed orders get full score
       } else if (isOverdue) {
-        orderScore = 0.2; // Overdue orders get low score
+        // Overdue orders: base score on completion rate, but capped low
+        orderScore = Math.min(0.3, completionRate * 0.5);
       } else {
         // Weighted combination: completion rate (40%), on-time rate (30%), risk factor (30%)
         orderScore = (completionRate * 0.4) + (onTimeRate * 0.3) + (riskFactor * 0.3);

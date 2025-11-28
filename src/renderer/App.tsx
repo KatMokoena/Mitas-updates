@@ -9,6 +9,7 @@ import CreateOrder from './components/CreateOrder';
 import Tasks from './components/Tasks';
 import AllProjectsGantt from './components/AllProjectsGantt';
 import Settings from './components/Settings';
+import TimeTracking from './components/TimeTracking';
 import Layout from './components/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthContext } from './context/AuthContext';
@@ -122,8 +123,44 @@ const App: React.FC = () => {
     }
   };
 
-  const handleLogout = useCallback(() => {
+  const handleLogout = useCallback(async () => {
     const sessionId = localStorage.getItem('sessionId');
+    
+    // First, check for and stop any running timer
+    if (sessionId) {
+      try {
+        // Check for running timer
+        const timerResponse = await fetch(`${API_BASE_URL || ''}/api/time-tracking/timer/running`, {
+          headers: { 'x-session-id': sessionId },
+        });
+        
+        if (timerResponse.ok) {
+          const runningTimer = await timerResponse.json();
+          if (runningTimer && runningTimer.id) {
+            // Stop the running timer before logout
+            try {
+              await fetch(`${API_BASE_URL || ''}/api/time-tracking/timer/stop`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-session-id': sessionId,
+                },
+                body: JSON.stringify({ timeEntryId: runningTimer.id }),
+              });
+              console.log('Running timer stopped on logout');
+            } catch (timerError) {
+              console.error('Failed to stop timer on logout:', timerError);
+              // Continue with logout even if timer stop fails
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error checking for running timer on logout:', error);
+        // Continue with logout even if timer check fails
+      }
+    }
+    
+    // Now proceed with normal logout
     if (sessionId) {
       // Try to logout on server, but don't wait for it
       fetch(`${API_BASE_URL || ''}/api/auth/logout`, {
@@ -207,6 +244,7 @@ const App: React.FC = () => {
             <Route path="all-projects-gantt" element={<ProtectedRoute route="all-projects-gantt"><AllProjectsGantt /></ProtectedRoute>} />
             <Route path="users" element={<ProtectedRoute route="users"><Users /></ProtectedRoute>} />
             <Route path="settings" element={<ProtectedRoute route="settings"><Settings /></ProtectedRoute>} />
+            <Route path="projects/:projectId/time-tracking" element={<ProtectedRoute route="orders"><TimeTracking /></ProtectedRoute>} />
           </Route>
           <Route path="*" element={<Navigate to={user ? "/" : "/login"} replace />} />
         </Routes>

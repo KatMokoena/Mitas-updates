@@ -107,11 +107,11 @@ const RequisitionStatusNotification: React.FC = () => {
                       <>
                         <strong style={{ color: '#2ECC71' }}>✓ Approved</strong>
                         {' - Your requisition for '}
-                        <strong>Order {requisition.order?.orderNumber || requisition.orderId}</strong>
+                        <strong>Project {requisition.order?.orderNumber || requisition.orderId}</strong>
                         {' has been approved'}
                         {!requisition.taskAssignmentEnabled && (
                           <p style={{ marginTop: '0.5rem', color: '#94a3b8', fontSize: '0.875rem' }}>
-                            Click "Enable Task Assignment" on the order page to start creating tasks.
+                            Click "Enable Task Assignment" on the project page to start creating tasks.
                           </p>
                         )}
                       </>
@@ -119,7 +119,7 @@ const RequisitionStatusNotification: React.FC = () => {
                       <>
                         <strong style={{ color: '#E74C3C' }}>✗ Rejected</strong>
                         {' - Your requisition for '}
-                        <strong>Order {requisition.order?.orderNumber || requisition.orderId}</strong>
+                        <strong>Project {requisition.order?.orderNumber || requisition.orderId}</strong>
                         {' has been rejected'}
                         {requisition.rejectionReason && (
                           <p className="invitation-message" style={{ marginTop: '0.5rem' }}>
@@ -138,7 +138,7 @@ const RequisitionStatusNotification: React.FC = () => {
                         }}
                         className="invitation-link"
                       >
-                        View Order →
+                        View Project →
                       </Link>
                     )}
                   </div>

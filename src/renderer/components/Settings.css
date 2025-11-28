@@ -376,11 +376,135 @@
   padding: 0;
 }
 
+.clifton-strengths-tab {
+  padding: var(--spacing-lg);
+}
+
 .tab-description {
   font-size: 14px;
   color: var(--text-muted);
   margin: var(--spacing-sm) 0 var(--spacing-lg) 0;
   line-height: 1.6;
+}
+
+/* CliftonStrengths Tab Styles */
+.strengths-form-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xl);
+}
+
+.strengths-input-section {
+  background: var(--panel-glass);
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-lg);
+  margin-top: var(--spacing-md);
+}
+
+.strengths-input-section h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-main);
+  margin-bottom: var(--spacing-md);
+}
+
+.strength-preview {
+  margin-top: var(--spacing-sm);
+  padding: var(--spacing-sm);
+  background: rgba(249, 115, 22, 0.1);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+}
+
+.preview-category {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--accent);
+  margin-bottom: var(--spacing-xs);
+}
+
+.preview-description {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.strengths-list-section {
+  margin-top: var(--spacing-xl);
+}
+
+.strengths-list-section h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-main);
+  margin-bottom: var(--spacing-md);
+}
+
+.strengths-table {
+  background: var(--panel-glass);
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.strengths-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.strengths-table thead {
+  background: rgba(15, 23, 42, 0.6);
+}
+
+.strengths-table th {
+  padding: var(--spacing-md);
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.strengths-table td {
+  padding: var(--spacing-md);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-main);
+  font-size: 14px;
+}
+
+.strengths-table tbody tr:hover {
+  background: rgba(249, 115, 22, 0.05);
+}
+
+.strengths-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+}
+
+.strength-tag {
+  padding: 4px 10px;
+  background: rgba(249, 115, 22, 0.15);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--accent);
+}
+
+.form-actions {
+  display: flex;
+  gap: var(--spacing-md);
+  margin-top: var(--spacing-lg);
 }
 
 .tab-description strong {

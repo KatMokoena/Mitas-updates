@@ -11,6 +11,7 @@ interface Order {
   deadline: string;
   status: OrderStatus;
   priority: OrderPriority;
+  departmentId?: string;
 }
 
 interface Task {
@@ -63,6 +64,7 @@ const AllProjectsGantt: React.FC = () => {
 
       if (response.ok) {
         const data = await response.json();
+        // Backend now returns all orders - no department restrictions
         setOrders(data);
       }
     } catch (error) {

@@ -55,13 +55,13 @@ const OrderTimeline: React.FC = () => {
       fetchTimeline();
     }
 
-    // Auto-refresh every 10 seconds
+    // Auto-refresh every 1 second
     if (autoRefresh) {
       refreshIntervalRef.current = setInterval(() => {
         if (id) {
           fetchTimeline();
         }
-      }, 10000);
+      }, 1000);
     }
 
     return () => {
@@ -153,7 +153,7 @@ const OrderTimeline: React.FC = () => {
   }
 
   if (!order || !timeline) {
-    return <div className="order-timeline-error">Order not found</div>;
+    return <div className="order-timeline-error">Project not found</div>;
   }
 
   const deadline = new Date(order.deadline);
@@ -163,7 +163,7 @@ const OrderTimeline: React.FC = () => {
   return (
     <div className="order-timeline">
       <div className="order-timeline-header">
-        <Link to="/orders" className="back-link">← Back to Orders</Link>
+        <Link to="/orders" className="back-link">← Back to Projects</Link>
         <div className="header-content">
           <div>
             <h1>{order.orderNumber}</h1>
@@ -311,6 +311,11 @@ const OrderTimeline: React.FC = () => {
 };
 
 export default OrderTimeline;
+
+
+
+
+
 
 
 

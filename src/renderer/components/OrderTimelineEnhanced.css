@@ -48,10 +48,11 @@
 }
 
 .header-actions {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
   gap: 12px;
-  align-items: flex-end;
+  align-items: start;
+  min-width: 320px;
 }
 
 .header-actions .btn-secondary {

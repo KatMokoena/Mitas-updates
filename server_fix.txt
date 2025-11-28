@@ -1,0 +1,18 @@
+// Start the server
+app.listen(PORT, () => {
+  console.log(`\n🚀 Server running at http://localhost:${PORT}`);
+  console.log(`📊 API available at http://localhost:${PORT}/api`);
+  if (isDevelopment) {
+    console.log(`\n⚠️  Development Mode: React app is on http://localhost:8080`);
+    console.log(`   Open your browser and navigate to: http://localhost:8080\n`);
+  } else {
+    console.log(`\nOpen your browser and navigate to: http://localhost:${PORT}\n`);
+  }
+});
+
+
+
+
+
+
+

@@ -1,0 +1,188 @@
+/* TIMER COMPONENT - TogglTrack-like interface with dark theme */
+
+.timer-container {
+  background: var(--panel-glass);
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  box-shadow: var(--shadow-medium);
+  margin-bottom: 20px;
+}
+
+.timer-display {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.timer-time {
+  font-size: 48px;
+  font-weight: 600;
+  color: var(--text-main);
+  font-family: 'Courier New', monospace;
+  margin-bottom: 10px;
+}
+
+.timer-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.timer-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ff4444;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.timer-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.timer-task-selector {
+  margin-bottom: 12px;
+}
+
+.timer-task-selector label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.task-select-wrapper {
+  display: flex;
+  gap: 8px;
+}
+
+.timer-task-select {
+  flex: 1;
+  padding: 10px 14px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-main);
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.timer-task-select:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 3px var(--accent-blue-soft);
+  background: rgba(15, 23, 42, 0.8);
+}
+
+.timer-add-task-btn {
+  padding: 10px 16px;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 18px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-base);
+  min-width: 44px;
+}
+
+.timer-add-task-btn:hover {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-glow-orange);
+}
+
+.timer-description-input {
+  padding: 12px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  color: var(--text-main);
+  width: 100%;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+.timer-description-input::placeholder {
+  color: var(--text-subtle);
+}
+
+.timer-description-input:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 3px var(--accent-blue-soft);
+  background: rgba(15, 23, 42, 0.8);
+}
+
+.timer-button {
+  padding: 12px 24px;
+  border: none;
+  border-radius: 6px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.timer-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.timer-button-start {
+  background: linear-gradient(135deg, var(--accent) 0%, #ea580c 100%);
+  color: white;
+  box-shadow: var(--shadow-glow-orange), var(--shadow-medium);
+}
+
+.timer-button-start:hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--accent-hover) 0%, var(--accent) 100%);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-glow-orange), var(--shadow-strong);
+}
+
+.timer-button-stop {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  color: white;
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4);
+}
+
+.timer-button-stop:hover:not(:disabled) {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(220, 38, 38, 0.5);
+}
+
+.timer-error {
+  background: var(--status-danger-soft);
+  color: var(--status-danger);
+  padding: 10px;
+  border-radius: var(--radius-md);
+  margin-bottom: 12px;
+  font-size: 14px;
+  border: 1px solid var(--status-danger);
+}
+

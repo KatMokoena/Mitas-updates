@@ -130,7 +130,7 @@ const InvitationsNotification: React.FC = () => {
                       onClick={() => setShowNotifications(false)}
                       className="invitation-link"
                     >
-                      View Order →
+                      View Project →
                     </Link>
                   )}
                 </div>

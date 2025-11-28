@@ -95,7 +95,9 @@
   box-shadow: var(--shadow-strong);
   z-index: 10;
   position: relative;
-  overflow: visible;
+  overflow: hidden; /* Changed from visible to prevent content overflow */
+  height: 100vh; /* Ensure full height */
+  max-height: 100vh; /* Prevent exceeding viewport */
 }
 
 /* Sidebar Header */
@@ -155,6 +157,10 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-xs);
+  overflow-y: auto; /* Allow scrolling if content is too long */
+  overflow-x: hidden;
+  min-height: 0; /* Important for flex children to allow shrinking */
+  max-height: calc(100vh - 400px); /* Reserve space for header, strengths, and footer */
 }
 
 .nav-menu li {
@@ -209,6 +215,15 @@
   padding: var(--spacing-md);
   border-top: 1px solid var(--border-subtle);
   background: rgba(15, 23, 42, 0.5);
+  display: flex !important; /* Force display */
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  flex-shrink: 0; /* Prevent footer from shrinking */
+  min-height: fit-content; /* Ensure minimum height */
+  visibility: visible !important; /* Ensure visibility */
+  opacity: 1 !important; /* Ensure opacity */
+  position: relative; /* Ensure it's in the flow */
+  z-index: 10; /* Ensure it's above other content */
 }
 
 .user-info {
@@ -217,6 +232,10 @@
   background: var(--panel-glass);
   border-radius: var(--radius-md);
   border: 1px solid var(--border-subtle);
+  display: block !important; /* Force display */
+  visibility: visible !important; /* Ensure visibility */
+  opacity: 1 !important; /* Ensure opacity */
+  position: relative; /* Ensure it's in the flow */
 }
 
 .user-info span {
@@ -256,6 +275,11 @@
   transition: all var(--transition-base);
   box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4);
   border: none;
+  display: block !important; /* Force display */
+  visibility: visible !important; /* Ensure visibility */
+  opacity: 1 !important; /* Ensure opacity */
+  position: relative; /* Ensure it's in the flow */
+  z-index: 11; /* Ensure it's above other content */
 }
 
 .logout-btn:hover {
@@ -266,4 +290,216 @@
 
 .logout-btn:active {
   transform: translateY(0);
+}
+
+/* ============================================
+   RESPONSIVE DESIGN
+   ============================================ */
+
+/* Tablet and smaller laptops */
+@media (max-width: 1024px) {
+  .sidebar {
+    width: 240px;
+  }
+
+  .main-content {
+    padding: var(--spacing-lg);
+  }
+
+  .sidebar-footer {
+    padding: var(--spacing-sm) var(--spacing-md);
+  }
+
+  .user-info {
+    padding: var(--spacing-xs) var(--spacing-sm);
+    font-size: 12px;
+  }
+
+  .logout-btn {
+    padding: 10px;
+    font-size: 13px;
+  }
+}
+
+/* Small laptops and tablets in portrait */
+@media (max-width: 768px) {
+  .layout {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+    height: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--border-subtle);
+    flex-direction: row;
+    align-items: center;
+    padding: var(--spacing-sm) var(--spacing-md);
+  }
+
+  .sidebar-header {
+    padding: var(--spacing-sm);
+    border-bottom: none;
+    border-right: 1px solid var(--border-subtle);
+    min-width: 200px;
+  }
+
+  .nav-menu {
+    flex-direction: row;
+    flex: 1;
+    overflow-x: auto;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    gap: var(--spacing-xs);
+  }
+
+  .nav-menu li {
+    flex-shrink: 0;
+  }
+
+  .nav-menu a {
+    padding: 8px 12px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  .sidebar-footer {
+    border-top: none;
+    border-left: 1px solid var(--border-subtle);
+    padding: var(--spacing-xs) var(--spacing-sm);
+    display: flex !important; /* Force display */
+    flex-direction: column;
+    gap: var(--spacing-xs);
+    min-width: 180px;
+    align-items: stretch;
+    flex-shrink: 0;
+    visibility: visible !important; /* Ensure visibility */
+    opacity: 1 !important;
+  }
+
+  .user-info {
+    margin-bottom: var(--spacing-xs);
+    padding: var(--spacing-xs);
+    font-size: 11px;
+  }
+
+  .user-info span {
+    font-size: 11px;
+  }
+
+  .user-role {
+    font-size: 10px;
+    padding: 2px 6px;
+  }
+
+  .logout-btn {
+    padding: 8px;
+    font-size: 12px;
+    width: 100%;
+  }
+
+  .main-content {
+    padding: var(--spacing-md);
+  }
+}
+
+/* Mobile devices */
+@media (max-width: 480px) {
+  .sidebar {
+    flex-wrap: wrap;
+    padding: var(--spacing-xs);
+  }
+
+  .sidebar-header {
+    min-width: auto;
+    flex: 1;
+    border-right: none;
+    border-bottom: 1px solid var(--border-subtle);
+    padding: var(--spacing-xs);
+  }
+
+  .nav-menu {
+    width: 100%;
+    order: 3;
+    border-top: 1px solid var(--border-subtle);
+    padding: var(--spacing-xs);
+  }
+
+  .sidebar-footer {
+    order: 2;
+    border-left: none;
+    border-top: none;
+    border-right: 1px solid var(--border-subtle);
+    min-width: auto;
+    flex: 1;
+    padding: var(--spacing-xs);
+    display: flex !important; /* Force display */
+    flex-direction: column;
+    gap: var(--spacing-xs);
+    visibility: visible !important; /* Ensure visibility */
+    opacity: 1 !important;
+  }
+
+  .user-info {
+    font-size: 10px;
+  }
+
+  .logout-btn {
+    font-size: 11px;
+    padding: 6px;
+  }
+
+  .main-content {
+    padding: var(--spacing-sm);
+  }
+}
+
+/* Ensure logout button and user info are always visible on all screen sizes */
+.sidebar-footer,
+.logout-btn,
+.user-info {
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+.sidebar-footer {
+  flex-direction: column !important;
+}
+
+.logout-btn {
+  display: block !important;
+}
+
+.user-info {
+  display: block !important;
+}
+
+/* Additional responsive rules for smaller screens */
+@media (max-width: 1200px) {
+  .sidebar-footer {
+    position: sticky;
+    bottom: 0;
+    background: var(--sidebar-bg) !important;
+    backdrop-filter: blur(20px) saturate(180%) !important;
+    -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+    z-index: 100;
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    flex-shrink: 0 !important;
+  }
+
+  .logout-btn {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: 100% !important;
+  }
+
+  .user-info {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: 100% !important;
+  }
 }

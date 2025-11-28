@@ -3,12 +3,17 @@ import { AuthenticatedRequest, authMiddleware } from '../middleware/auth';
 import { getDataSource } from '../../database/config';
 import { TaskEntity } from '../../database/entities/Task';
 import { OrderEntity } from '../../database/entities/Order';
+import { ProjectEntity } from '../../database/entities/Project';
 import { PermissionService } from '../../auth/permissions';
+import { ProjectService } from '../../services/projectService';
 import { SchedulingEngine } from '../../services/schedulingEngine';
+import { UserRole } from '../../shared/types';
+import { In } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 
 const router = Router();
 const permissionService = new PermissionService();
+const projectService = new ProjectService();
 const schedulingEngine = new SchedulingEngine();
 
 router.use(authMiddleware);
@@ -20,62 +25,16 @@ const canUserAccessOrderForTask = async (
   userDepartmentId: string | undefined, 
   orderId: string | undefined
 ): Promise<boolean> => {
-  if (!orderId) return true; // Tasks without orders are accessible
-  
-  // Admin, Project Manager, and Executives always have access
-  if (userRole === 'ADMIN' || userRole === 'admin' || 
-      userRole === 'PROJECT_MANAGER' || userRole === 'project_manager' ||
-      userRole === 'EXECUTIVES' || userRole === 'executives') {
-    return true;
-  }
-
-  const orderRepository = getDataSource().getRepository(OrderEntity);
-  const order = await orderRepository.findOne({ where: { id: orderId } });
-  
-  if (!order) return false;
-
-  // Check if order belongs to user's department
-  if (order.departmentId === userDepartmentId) {
-    return true;
-  }
-
-  // Check if user is assigned to any task in this order
-  const taskRepository = getDataSource().getRepository(TaskEntity);
-  const tasks = await taskRepository.find({ where: { orderId } });
-  const isAssignedToTask = tasks.some(task => task.assignedUserId === userId);
-  
-  if (isAssignedToTask) {
-    return true;
-  }
-
-  // Check if user has accepted an invitation for any task in this order
-  const { TaskInvitationEntity, InvitationStatus } = await import('../../database/entities/TaskInvitation');
-  const invitationRepository = getDataSource().getRepository(TaskInvitationEntity);
-  const taskIds = tasks.map(t => t.id);
-  if (taskIds.length > 0) {
-    // Check for accepted invitations - handle both enum and string values for robustness
-    const acceptedInvitations = await invitationRepository.find({
-      where: {
-        inviteeId: userId,
-      },
-    });
-    // Filter for accepted status (handle both enum value and string)
-    const hasAcceptedInvitation = acceptedInvitations.some(inv => {
-      const statusStr = String(inv.status).toLowerCase();
-      return taskIds.includes(inv.taskId) && 
-             (inv.status === InvitationStatus.ACCEPTED || statusStr === 'accepted');
-    });
-    if (hasAcceptedInvitation) {
-      return true;
-    }
-  }
-
-  return false;
+  if (!orderId) return true; // No order restriction
+  return projectService.canUserAccessOrder(userId, userRole, userDepartmentId, orderId);
 };
 
 // Get all tasks
 router.get('/', async (req: AuthenticatedRequest, res: Response) => {
   try {
+    const userId = req.user!.id;
+    const userRole = req.user!.role;
+    const userDepartmentId = req.user!.departmentId;
     const taskRepository = getDataSource().getRepository(TaskEntity);
     const orderId = req.query.orderId as string;
     const projectId = req.query.projectId as string;
@@ -88,12 +47,41 @@ router.get('/', async (req: AuthenticatedRequest, res: Response) => {
       where.projectId = projectId;
     }
 
-    const tasks = await taskRepository.find({
+    let tasks = await taskRepository.find({
       where,
       order: { startDate: 'ASC' },
     });
+
+    // Filter tasks based on order/project access for USER and PROJECT_MANAGER roles
+    const roleStr = typeof userRole === 'string' ? userRole.toUpperCase() : userRole;
+    if (roleStr === UserRole.USER || roleStr === 'USER' || roleStr === UserRole.PROJECT_MANAGER || roleStr === 'PROJECT_MANAGER') {
+      const accessibleTasks = [];
+      for (const task of tasks) {
+        let canAccess = false;
+        
+        // If task has orderId, check order access
+        if (task.orderId) {
+          canAccess = await projectService.canUserAccessOrder(userId, userRole, userDepartmentId, task.orderId);
+        }
+        // If task has projectId, check project access
+        else if (task.projectId) {
+          canAccess = await projectService.canUserAccessProject(userId, userRole, userDepartmentId, task.projectId);
+        }
+        // If task has neither, allow access (shouldn't happen, but be safe)
+        else {
+          canAccess = true;
+        }
+        
+        if (canAccess) {
+          accessibleTasks.push(task);
+        }
+      }
+      tasks = accessibleTasks;
+    }
+
     res.json(tasks);
   } catch (error) {
+    console.error('Failed to fetch tasks:', error);
     res.status(500).json({ error: 'Failed to fetch tasks' });
   }
 });
@@ -101,6 +89,9 @@ router.get('/', async (req: AuthenticatedRequest, res: Response) => {
 // Get task by ID
 router.get('/:id', async (req: AuthenticatedRequest, res: Response) => {
   try {
+    const userId = req.user!.id;
+    const userRole = req.user!.role;
+    const userDepartmentId = req.user!.departmentId;
     const taskRepository = getDataSource().getRepository(TaskEntity);
     const task = await taskRepository.findOne({ where: { id: req.params.id } });
     
@@ -109,8 +100,33 @@ router.get('/:id', async (req: AuthenticatedRequest, res: Response) => {
       return;
     }
 
+    // Check access control for USER and PROJECT_MANAGER roles
+    const roleStr = typeof userRole === 'string' ? userRole.toUpperCase() : userRole;
+    if (roleStr === UserRole.USER || roleStr === 'USER' || roleStr === UserRole.PROJECT_MANAGER || roleStr === 'PROJECT_MANAGER') {
+      let canAccess = false;
+      
+      // If task has orderId, check order access
+      if (task.orderId) {
+        canAccess = await projectService.canUserAccessOrder(userId, userRole, userDepartmentId, task.orderId);
+      }
+      // If task has projectId, check project access
+      else if (task.projectId) {
+        canAccess = await projectService.canUserAccessProject(userId, userRole, userDepartmentId, task.projectId);
+      }
+      // If task has neither, allow access (shouldn't happen, but be safe)
+      else {
+        canAccess = true;
+      }
+      
+      if (!canAccess) {
+        res.status(403).json({ error: 'Access denied. You do not have permission to view this task.' });
+        return;
+      }
+    }
+
     res.json(task);
   } catch (error) {
+    console.error('Failed to fetch task:', error);
     res.status(500).json({ error: 'Failed to fetch task' });
   }
 });
@@ -118,20 +134,7 @@ router.get('/:id', async (req: AuthenticatedRequest, res: Response) => {
 // Create task - Department-based access control
 router.post('/', async (req: AuthenticatedRequest, res: Response) => {
   try {
-    // Check if user can access the order for this task
-    const hasAccess = await canUserAccessOrderForTask(
-      req.user!.id,
-      req.user!.role,
-      req.user!.departmentId,
-      req.body.orderId
-    );
-
-    if (!hasAccess) {
-      res.status(403).json({ 
-        error: 'Access denied. You can only add tasks to orders from your own department or orders where you are assigned to a task.' 
-      });
-      return;
-    }
+    // All users can create tasks in all orders - no restrictions
 
     const taskRepository = getDataSource().getRepository(TaskEntity);
     const task = taskRepository.create({
@@ -162,20 +165,7 @@ router.put('/:id', async (req: AuthenticatedRequest, res: Response) => {
       return;
     }
 
-    // Check if user can access the order for this task
-    const hasAccess = await canUserAccessOrderForTask(
-      req.user!.id,
-      req.user!.role,
-      req.user!.departmentId,
-      task.orderId || undefined
-    );
-
-    if (!hasAccess) {
-      res.status(403).json({ 
-        error: 'Access denied. You can only edit tasks in orders from your own department or orders where you are assigned to a task.' 
-      });
-      return;
-    }
+    // All users can edit all tasks - no restrictions
 
     // Check permissions
     const canEdit = permissionService.canEditTasks(req.user!.role);
@@ -187,6 +177,27 @@ router.put('/:id', async (req: AuthenticatedRequest, res: Response) => {
     if (!canEdit && !canUpdateStatus) {
       res.status(403).json({ error: 'Insufficient permissions' });
       return;
+    }
+
+    // Check if trying to mark task as completed
+    if (req.body.status === 'completed' || (req.body.status === undefined && task.status === 'completed')) {
+      // Validate that all dependencies are completed
+      if (task.dependencies && task.dependencies.length > 0) {
+        const dependencyTasks = await taskRepository.find({
+          where: { id: In(task.dependencies) },
+        });
+
+        const incompleteDependencies = dependencyTasks.filter(
+          (depTask) => depTask.status !== 'completed'
+        );
+
+        if (incompleteDependencies.length > 0) {
+          const incompleteNames = incompleteDependencies.map((t) => t.title).join(', ');
+          return res.status(400).json({
+            error: `Cannot complete this task. The following dependent tasks must be completed first: ${incompleteNames}`,
+          });
+        }
+      }
     }
 
     // If user can only update status, restrict changes
@@ -233,20 +244,7 @@ router.delete('/:id', async (req: AuthenticatedRequest, res: Response) => {
       return;
     }
 
-    // Check if user can access the order for this task
-    const hasAccess = await canUserAccessOrderForTask(
-      req.user!.id,
-      req.user!.role,
-      req.user!.departmentId,
-      task.orderId || undefined
-    );
-
-    if (!hasAccess) {
-      res.status(403).json({ 
-        error: 'Access denied. You can only delete tasks in orders from your own department or orders where you are assigned to a task.' 
-      });
-      return;
-    }
+    // All users can delete tasks in all orders - no restrictions
     
     const orderId = task.orderId;
     await taskRepository.delete(req.params.id);

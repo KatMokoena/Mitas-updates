@@ -18,6 +18,7 @@ interface Task {
   projectId?: string;
   priority?: OrderPriority;
   milestone?: boolean;
+  updatedAt?: string;
 }
 
 interface User {
@@ -31,6 +32,7 @@ interface Order {
   id: string;
   orderNumber: string;
   customerName: string;
+  departmentId?: string;
 }
 
 const Tasks: React.FC = () => {
@@ -55,6 +57,8 @@ const Tasks: React.FC = () => {
 
       if (response.ok) {
         const data = await response.json();
+        // Backend already filters tasks by department, so we can trust the response
+        // Client-side filtering is not needed here since backend handles it
         setTasks(data);
       }
     } catch (error) {
@@ -93,8 +97,21 @@ const Tasks: React.FC = () => {
 
       if (response.ok) {
         const data = await response.json();
+        // Client-side filtering: Only show orders from user's department
+        // (Backend already filters, but this provides additional safety)
+        let filteredData = data;
+        if (user && user.role !== 'ADMIN' && user.role !== 'admin' && 
+            user.role !== 'EXECUTIVES' && user.role !== 'executives') {
+          // Users and Project Managers: filter by their department
+          if (user.departmentId) {
+            filteredData = data.filter((order: Order) => order.departmentId === user.departmentId);
+          } else {
+            // User has no department, show nothing
+            filteredData = [];
+          }
+        }
         const orderMap = new Map<string, Order>();
-        data.forEach((o: Order) => {
+        filteredData.forEach((o: Order) => {
           orderMap.set(o.id, o);
         });
         setOrders(orderMap);
@@ -187,6 +204,28 @@ const Tasks: React.FC = () => {
     const startStr = formatDate(startDate);
     const endStr = formatDate(endDate);
     return `${startStr} - ${endStr}`;
+  };
+
+  const formatRelativeTime = (dateString: string | undefined): string => {
+    if (!dateString) return 'Recently';
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffSeconds = Math.floor(diffMs / 1000);
+    const diffMinutes = Math.floor(diffSeconds / 60);
+    const diffHours = Math.floor(diffMinutes / 60);
+    const diffDays = Math.floor(diffHours / 24);
+    const diffWeeks = Math.floor(diffDays / 7);
+    const diffMonths = Math.floor(diffDays / 30);
+    const diffYears = Math.floor(diffDays / 365);
+
+    if (diffSeconds < 60) return 'Just now';
+    if (diffMinutes < 60) return `${diffMinutes} minute${diffMinutes !== 1 ? 's' : ''} ago`;
+    if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+    if (diffDays < 7) return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
+    if (diffWeeks < 4) return `${diffWeeks} week${diffWeeks !== 1 ? 's' : ''} ago`;
+    if (diffMonths < 12) return `${diffMonths} month${diffMonths !== 1 ? 's' : ''} ago`;
+    return `${diffYears} year${diffYears !== 1 ? 's' : ''} ago`;
   };
 
   if (loading) {
@@ -316,7 +355,7 @@ const Tasks: React.FC = () => {
                             {getInitials(assignedUser)}
                           </div>
                         )}
-                        <span className="last-updated-text">Recently</span>
+                        <span className="last-updated-text">{formatRelativeTime(task.updatedAt)}</span>
                       </div>
                     </td>
                   </tr>

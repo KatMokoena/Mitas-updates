@@ -22,6 +22,7 @@ export enum AuditEntityType {
   RESOURCE = 'resource',
   DEPARTMENT = 'department',
   CONFIGURATION = 'configuration',
+  TIME_ENTRY = 'time_entry',
 }
 
 @Entity('audit_logs')
@@ -65,5 +66,11 @@ export class AuditLogEntity {
   @CreateDateColumn()
   createdAt!: Date;
 }
+
+
+
+
+
+
 
 

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { API_BASE_URL } from '../config';
 import { useAuth } from '../context/AuthContext';
 import { Department } from '../../shared/types';
+import { ALL_CLIFTON_STRENGTHS, STRENGTH_DETAILS } from '../../shared/cliftonStrengths';
 import './Settings.css';
 
 interface Resource {
@@ -12,7 +13,7 @@ interface Resource {
   allocatedTaskIds?: string[];
 }
 
-type TabType = 'departments' | 'equipment' | 'configurations';
+type TabType = 'departments' | 'equipment' | 'configurations' | 'cliftonStrengths';
 type EquipmentSubTabType = 'technologies' | 'solutions';
 
 interface Configuration {
@@ -87,11 +88,21 @@ const Settings: React.FC = () => {
     category: 'technology' as 'technology' | 'solution' | undefined
   });
 
+  // CliftonStrengths state
+  const [allUsers, setAllUsers] = useState<Array<{ id: string; email: string; name?: string; surname?: string }>>([]);
+  const [selectedUserEmail, setSelectedUserEmail] = useState('');
+  const [userStrengths, setUserStrengths] = useState<string[]>(['', '', '', '', '', '']);
+  const [allStrengthsData, setAllStrengthsData] = useState<Array<any>>([]);
+
   useEffect(() => {
     // If component renders, user has permission to access settings (checked by ProtectedRoute)
     fetchDepartments();
     fetchEquipment();
     fetchConfigurations();
+    if (user && (user.role === 'ADMIN' || user.role === 'admin')) {
+      fetchAllUsers();
+      fetchAllStrengths();
+    }
     setLoading(false);
   }, [user]);
 
@@ -301,6 +312,157 @@ const Settings: React.FC = () => {
     }
   };
 
+  const fetchAllUsers = async () => {
+    try {
+      const sessionId = localStorage.getItem('sessionId');
+      const response = await fetch(`${API_BASE_URL}/api/users`, {
+        headers: { 'x-session-id': sessionId || '' },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setAllUsers(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch users:', error);
+    }
+  };
+
+  const fetchAllStrengths = async () => {
+    try {
+      const sessionId = localStorage.getItem('sessionId');
+      const response = await fetch(`${API_BASE_URL}/api/clifton-strengths/all`, {
+        headers: { 'x-session-id': sessionId || '' },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setAllStrengthsData(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch all strengths:', error);
+    }
+  };
+
+  const loadUserStrengths = async (email: string) => {
+    try {
+      const sessionId = localStorage.getItem('sessionId');
+      const user = allUsers.find(u => u.email === email);
+      if (!user) return;
+
+      const response = await fetch(`${API_BASE_URL}/api/clifton-strengths/user/${user.id}`, {
+        headers: { 'x-session-id': sessionId || '' },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data && data.topStrengths) {
+          setUserStrengths([...data.topStrengths, '', '', '', '', '', ''].slice(0, 6));
+        } else {
+          setUserStrengths(['', '', '', '', '', '']);
+        }
+      } else {
+        setUserStrengths(['', '', '', '', '', '']);
+      }
+    } catch (error) {
+      console.error('Failed to load user strengths:', error);
+      setUserStrengths(['', '', '', '', '', '']);
+    }
+  };
+
+  const handleSaveStrengths = async () => {
+    if (!selectedUserEmail || userStrengths.some(s => !s)) {
+      alert('Please select a user and enter all 6 strengths.');
+      return;
+    }
+
+    try {
+      const sessionId = localStorage.getItem('sessionId');
+      const response = await fetch(`${API_BASE_URL}/api/clifton-strengths`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-session-id': sessionId || '',
+        },
+        body: JSON.stringify({
+          userEmail: selectedUserEmail,
+          topStrengths: userStrengths,
+        }),
+      });
+
+      if (response.ok) {
+        const savedData = await response.json();
+        setSaveStatus({ type: 'success', message: 'Strengths saved successfully!' });
+        await fetchAllStrengths();
+        
+        // Get userId from allUsers or savedData
+        const targetUser = allUsers.find(u => u.email === selectedUserEmail);
+        const targetUserId = savedData?.userId || targetUser?.id;
+        
+        // Trigger refresh in sidebar by dispatching custom event
+        if (targetUserId) {
+          console.log('[Settings] Triggering refresh for userId:', targetUserId);
+          // Dispatch custom event to notify sidebar to refresh
+          window.dispatchEvent(new CustomEvent('cliftonStrengthsUpdated', { 
+            detail: { userId: targetUserId } 
+          }));
+          // Also use localStorage for cross-tab communication
+          localStorage.setItem('cliftonStrengthsUpdated', targetUserId);
+          setTimeout(() => localStorage.removeItem('cliftonStrengthsUpdated'), 100);
+        }
+        setTimeout(() => setSaveStatus({ type: null, message: '' }), 3000);
+      } else {
+        const errorData = await response.json();
+        setSaveStatus({ type: 'error', message: errorData.error || 'Failed to save strengths' });
+        setTimeout(() => setSaveStatus({ type: null, message: '' }), 5000);
+      }
+    } catch (error) {
+      console.error('Failed to save strengths:', error);
+      setSaveStatus({ type: 'error', message: 'Failed to save strengths' });
+      setTimeout(() => setSaveStatus({ type: null, message: '' }), 5000);
+    }
+  };
+
+  const handleDeleteStrengths = async (userId: string) => {
+    if (!confirm('Are you sure you want to delete this user\'s strengths profile?')) return;
+
+    try {
+      const sessionId = localStorage.getItem('sessionId');
+      const response = await fetch(`${API_BASE_URL}/api/clifton-strengths/user/${userId}`, {
+        method: 'DELETE',
+        headers: { 'x-session-id': sessionId || '' },
+      });
+
+      if (response.ok) {
+        setSaveStatus({ type: 'success', message: 'Strengths deleted successfully!' });
+        await fetchAllStrengths();
+        
+        // Trigger refresh in sidebar by dispatching custom event
+        window.dispatchEvent(new CustomEvent('cliftonStrengthsUpdated', { 
+          detail: { userId } 
+        }));
+        // Also use localStorage for cross-tab communication
+        localStorage.setItem('cliftonStrengthsUpdated', userId);
+        setTimeout(() => localStorage.removeItem('cliftonStrengthsUpdated'), 100);
+        
+        if (selectedUserEmail) {
+          const user = allUsers.find(u => u.id === userId);
+          if (user && user.email === selectedUserEmail) {
+            setSelectedUserEmail('');
+            setUserStrengths(['', '', '', '', '', '']);
+          }
+        }
+        setTimeout(() => setSaveStatus({ type: null, message: '' }), 3000);
+      } else {
+        const errorData = await response.json();
+        setSaveStatus({ type: 'error', message: errorData.error || 'Failed to delete strengths' });
+        setTimeout(() => setSaveStatus({ type: null, message: '' }), 5000);
+      }
+    } catch (error) {
+      console.error('Failed to delete strengths:', error);
+      setSaveStatus({ type: 'error', message: 'Failed to delete strengths' });
+      setTimeout(() => setSaveStatus({ type: null, message: '' }), 5000);
+    }
+  };
+
   const fetchConfigurations = async () => {
     try {
       const sessionId = localStorage.getItem('sessionId');
@@ -492,6 +654,14 @@ const Settings: React.FC = () => {
         >
           Configurations
         </button>
+        {user && (user.role === 'ADMIN' || user.role === 'admin') && (
+          <button
+            className={`settings-tab ${activeTab === 'cliftonStrengths' ? 'active' : ''}`}
+            onClick={() => setActiveTab('cliftonStrengths')}
+          >
+            CliftonStrengths
+          </button>
+        )}
       </div>
 
       <div className="settings-content">
@@ -1247,6 +1417,162 @@ const Settings: React.FC = () => {
                   </div>
                 );
               })}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'cliftonStrengths' && user && (user.role === 'ADMIN' || user.role === 'admin') && (
+          <div className="clifton-strengths-tab">
+            <div className="tab-header">
+              <h2>CliftonStrengths Management</h2>
+              <p className="tab-description">
+                Manage CliftonStrengths profiles for users. Select a user by email and enter their Top 6 strengths.
+              </p>
+            </div>
+
+            <div className="strengths-form-section">
+              <div className="form-group">
+                <label>Select User by Email *</label>
+                <select
+                  value={selectedUserEmail}
+                  onChange={(e) => {
+                    setSelectedUserEmail(e.target.value);
+                    if (e.target.value) {
+                      loadUserStrengths(e.target.value);
+                    } else {
+                      setUserStrengths(['', '', '', '', '', '']);
+                    }
+                  }}
+                  className="input"
+                >
+                  <option value="">-- Select a user --</option>
+                  {allUsers.map((u) => (
+                    <option key={u.id} value={u.email}>
+                      {u.email} {u.name && u.surname ? `(${u.name} ${u.surname})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {selectedUserEmail && (
+                <div className="strengths-input-section">
+                  <h3>Top 6 CliftonStrengths</h3>
+                  {[0, 1, 2, 3, 4, 5].map((index) => (
+                    <div key={index} className="form-group">
+                      <label>Strength #{index + 1} *</label>
+                      <select
+                        value={userStrengths[index] || ''}
+                        onChange={(e) => {
+                          const newStrengths = [...userStrengths];
+                          newStrengths[index] = e.target.value;
+                          setUserStrengths(newStrengths);
+                        }}
+                        className="input"
+                        required
+                      >
+                        <option value="">-- Select strength --</option>
+                        {ALL_CLIFTON_STRENGTHS.filter(
+                          (strength) => !userStrengths.includes(strength) || userStrengths[index] === strength
+                        ).map((strength) => (
+                          <option key={strength} value={strength}>
+                            {strength}
+                            {STRENGTH_DETAILS[strength] && ` (${STRENGTH_DETAILS[strength].category})`}
+                          </option>
+                        ))}
+                      </select>
+                      {userStrengths[index] && STRENGTH_DETAILS[userStrengths[index]] && (
+                        <div className="strength-preview">
+                          <div className="preview-category">
+                            {STRENGTH_DETAILS[userStrengths[index]].category}
+                          </div>
+                          <div className="preview-description">
+                            {STRENGTH_DETAILS[userStrengths[index]].description}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+
+                  <div className="form-actions">
+                    <button
+                      type="button"
+                      onClick={handleSaveStrengths}
+                      className="btn-primary"
+                      disabled={!selectedUserEmail || userStrengths.some(s => !s)}
+                    >
+                      {allStrengthsData.find(s => s.userEmail === selectedUserEmail) ? 'Update' : 'Save'} Strengths
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedUserEmail('');
+                        setUserStrengths(['', '', '', '', '', '']);
+                      }}
+                      className="btn-secondary"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="strengths-list-section">
+                <h3>All User Strengths</h3>
+                {allStrengthsData.length === 0 ? (
+                  <div className="empty-state">
+                    <p>No strengths profiles created yet.</p>
+                  </div>
+                ) : (
+                  <div className="strengths-table">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>User</th>
+                          <th>Email</th>
+                          <th>Top 6 Strengths</th>
+                          <th>Last Updated</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {allStrengthsData.map((strengthData) => (
+                          <tr key={strengthData.id}>
+                            <td>{strengthData.userName}</td>
+                            <td>{strengthData.userEmail}</td>
+                            <td>
+                              <div className="strengths-tags">
+                                {strengthData.topStrengths.map((s: string, idx: number) => (
+                                  <span key={idx} className="strength-tag">
+                                    {s}
+                                  </span>
+                                ))}
+                              </div>
+                            </td>
+                            <td>{new Date(strengthData.updatedAt).toLocaleDateString()}</td>
+                            <td>
+                              <button
+                                onClick={() => {
+                                  setSelectedUserEmail(strengthData.userEmail);
+                                  setUserStrengths([...strengthData.topStrengths]);
+                                }}
+                                className="btn-edit"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => handleDeleteStrengths(strengthData.userId)}
+                                className="btn-delete"
+                              >
+                                Delete
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}

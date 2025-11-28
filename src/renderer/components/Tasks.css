@@ -112,6 +112,17 @@
   color: #5DADE2;
 }
 
+.order-company-link {
+  color: #ffffff;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.order-company-link:hover {
+  color: #cbd5e1;
+  text-decoration: underline;
+}
+
 .owner-col {
   width: 180px;
 }

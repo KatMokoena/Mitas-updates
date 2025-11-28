@@ -24,6 +24,9 @@ export class ProjectEntity {
   @Column('simple-array', { default: '' })
   assignedTeamIds!: string[];
 
+  @Column('uuid', { nullable: true })
+  departmentId?: string;
+
   @Column({ type: 'datetime', nullable: true })
   startDate?: Date;
 
@@ -36,6 +39,12 @@ export class ProjectEntity {
   @UpdateDateColumn()
   updatedAt!: Date;
 }
+
+
+
+
+
+
 
 
 

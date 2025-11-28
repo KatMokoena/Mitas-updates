@@ -26,8 +26,8 @@ export class SchedulerService {
 
     // Cron expression: "32 15 * * *" means "at 15:32 (3:32 PM) every day"
     // Format: minute hour day month day-of-week
-    const cronExpression = '45 18 * * *';
-    console.log(`Setting up cron schedule: ${cronExpression} (18:45 / 6:45 PM)`);
+    const cronExpression = '55 18 * * *';
+    console.log(`Setting up cron schedule: ${cronExpression} (18:55 / 6:55 PM)`);
     console.log(`Timezone: Africa/Johannesburg`);
     
     this.scheduledTask = cron.schedule(cronExpression, async () => {
@@ -54,13 +54,13 @@ export class SchedulerService {
     // Verify the task was created
     if (this.scheduledTask) {
       console.log('✅ Daily email scheduler started successfully');
-      console.log('   Schedule: Every day at 18:45 (6:45 PM)');
+      console.log('   Schedule: Every day at 18:55 (6:55 PM)');
       console.log('   Timezone: Africa/Johannesburg');
       
       // Calculate and display next run time
       const now = new Date();
       const nextRun = new Date();
-      nextRun.setHours(18, 45, 0, 0);
+      nextRun.setHours(18, 55, 0, 0);
       if (nextRun <= now) {
         nextRun.setDate(nextRun.getDate() + 1);
       }
@@ -153,7 +153,7 @@ export class SchedulerService {
     // Calculate next run time (15:21 / 3:21 PM today or tomorrow)
     const now = new Date();
     const nextRun = new Date();
-    nextRun.setHours(18, 45, 0, 0);
+    nextRun.setHours(18, 54, 0, 0);
     if (nextRun <= now) {
       nextRun.setDate(nextRun.getDate() + 1);
     }

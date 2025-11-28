@@ -33,6 +33,9 @@ export class RequisitionEntity {
   @Column('simple-array', { nullable: true })
   approvedByIds?: string[]; // User IDs who have approved
 
+  @Column('simple-array', { nullable: true })
+  rejectedByIds?: string[]; // User IDs who have rejected
+
   @Column({
     type: 'text',
     default: RequisitionStatus.DRAFT,

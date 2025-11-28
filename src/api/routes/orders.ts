@@ -6,112 +6,105 @@ import { PurchaseEntity } from '../../database/entities/Purchase';
 import { TaskEntity } from '../../database/entities/Task';
 import { PermissionService } from '../../auth/permissions';
 import { SchedulingEngine } from '../../services/schedulingEngine';
+import { ProjectService } from '../../services/projectService';
+import { PdfService } from '../../services/pdfService';
 import { UserRole } from '../../shared/types';
 import { v4 as uuidv4 } from 'uuid';
 
 const router = Router();
 const permissionService = new PermissionService();
 const schedulingEngine = new SchedulingEngine();
+const projectService = new ProjectService();
+const pdfService = new PdfService();
 
 router.use(authMiddleware);
 
 // Get all orders
 router.get('/', async (req: AuthenticatedRequest, res: Response) => {
   try {
+    const userId = req.user!.id;
+    const userRole = req.user!.role;
+    const userDepartmentId = req.user!.departmentId;
+    
     const orderRepository = getDataSource().getRepository(OrderEntity);
-    const orders = await orderRepository.find({
+    
+    // Admin and Executives can see all orders
+    const roleStr = typeof userRole === 'string' ? userRole.toUpperCase() : userRole;
+    if (roleStr === UserRole.ADMIN || roleStr === 'ADMIN' || roleStr === UserRole.EXECUTIVES || roleStr === 'EXECUTIVES') {
+      const orders = await orderRepository.find({
+        order: { createdAt: 'DESC' },
+      });
+      return res.json(orders);
+    }
+    
+    // For USER and PROJECT_MANAGER roles, filter orders based on access rules
+    const allOrders = await orderRepository.find({
       order: { createdAt: 'DESC' },
     });
-    res.json(orders);
+    
+    // Filter orders based on access control
+    const accessibleOrders = [];
+    for (const order of allOrders) {
+      const canAccess = await projectService.canUserAccessOrder(
+        userId,
+        userRole,
+        userDepartmentId,
+        order.id
+      );
+      if (canAccess) {
+        accessibleOrders.push(order);
+      }
+    }
+    
+    res.json(accessibleOrders);
   } catch (error) {
+    console.error('Failed to fetch orders:', error);
     res.status(500).json({ error: 'Failed to fetch orders' });
   }
 });
 
-// Helper function to check if user can access order
+// Helper function to check if user can access order (deprecated - use projectService.canUserAccessOrder)
 const canUserAccessOrder = async (userId: string, userRole: string, userDepartmentId: string | undefined, order: OrderEntity): Promise<boolean> => {
-  // Admin, Project Manager, and Executives always have access
-  if (userRole === 'ADMIN' || userRole === 'admin' || 
-      userRole === 'PROJECT_MANAGER' || userRole === 'project_manager' ||
-      userRole === 'EXECUTIVES' || userRole === 'executives') {
-    return true;
-  }
-
-  // Check if order belongs to user's department
-  if (order.departmentId === userDepartmentId) {
-    return true;
-  }
-
-  // Check if user is assigned to any task in this order
-  const taskRepository = getDataSource().getRepository(TaskEntity);
-  const tasks = await taskRepository.find({ where: { orderId: order.id } });
-  const isAssignedToTask = tasks.some(task => task.assignedUserId === userId);
-  
-  if (isAssignedToTask) {
-    return true;
-  }
-
-  // Check if user has accepted an invitation for any task in this order
-  // Note: When an invitation is accepted, the task is assigned to the user,
-  // so the isAssignedToTask check above should handle most cases.
-  // This check is a backup for cases where assignment might not have happened yet.
-  const { TaskInvitationEntity, InvitationStatus } = await import('../../database/entities/TaskInvitation');
-  const invitationRepository = getDataSource().getRepository(TaskInvitationEntity);
-  const taskIds = tasks.map(t => t.id);
-  if (taskIds.length > 0) {
-    // Get all invitations for this user
-    const allInvitations = await invitationRepository.find({
-      where: {
-        inviteeId: userId,
-      },
-    });
-    
-    // Filter for accepted invitations - handle both enum and string values for robustness
-    const hasAcceptedInvitation = allInvitations.some(inv => {
-      const isForThisOrder = taskIds.includes(inv.taskId);
-      const statusStr = String(inv.status).toLowerCase();
-      const isAccepted = inv.status === InvitationStatus.ACCEPTED || 
-                         statusStr === 'accepted';
-      return isForThisOrder && isAccepted;
-    });
-    
-    if (hasAcceptedInvitation) {
-      console.log(`User ${userId} has accepted invitation for order ${order.id}`);
-      return true;
-    }
-  }
-
-  return false;
+  return projectService.canUserAccessOrder(userId, userRole, userDepartmentId, order.id);
 };
 
-// Get order by ID - Department-based access control
+// Get order by ID - Access control enforced
 router.get('/:id', async (req: AuthenticatedRequest, res: Response) => {
   try {
+    const orderId = req.params.id;
+    const userId = req.user!.id;
+    const userRole = req.user!.role;
+    const userDepartmentId = req.user!.departmentId;
+    
+    console.log(`[GET /api/orders/:id] Fetching order ${orderId} for user ${userId} (role: ${userRole})`);
+    
     const orderRepository = getDataSource().getRepository(OrderEntity);
-    const order = await orderRepository.findOne({ where: { id: req.params.id } });
+    const order = await orderRepository.findOne({ where: { id: orderId } });
     
     if (!order) {
+      console.log(`[GET /api/orders/:id] Order ${orderId} not found in database`);
       res.status(404).json({ error: 'Order not found' });
       return;
     }
 
-    // Check access - STRICT: Block access if user cannot access order
-    const hasAccess = await canUserAccessOrder(
-      req.user!.id,
-      req.user!.role,
-      req.user!.departmentId,
-      order
+    // Check access control
+    const canAccess = await projectService.canUserAccessOrder(
+      userId,
+      userRole,
+      userDepartmentId,
+      orderId
     );
 
-    if (!hasAccess) {
-      res.status(403).json({ 
-        error: 'Access denied. You can only access orders from your own department or orders where you are assigned to a task via invitation.' 
-      });
+    if (!canAccess) {
+      console.log(`[GET /api/orders/:id] Access denied for user ${userId} to order ${orderId}`);
+      res.status(403).json({ error: 'Access denied. You do not have permission to view this order.' });
       return;
     }
 
+    console.log(`[GET /api/orders/:id] Order ${orderId} found. Returning order to user ${userId}`);
     res.json(order);
   } catch (error) {
+    console.error(`[GET /api/orders/:id] Error fetching order ${req.params.id}:`, error);
     res.status(500).json({ error: 'Failed to fetch order' });
   }
 });
@@ -119,7 +112,25 @@ router.get('/:id', async (req: AuthenticatedRequest, res: Response) => {
 // Get order timeline with calculated dates
 router.get('/:id/timeline', async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const timeline = await schedulingEngine.recalculateOrderTimeline(req.params.id);
+    const orderId = req.params.id;
+    const userId = req.user!.id;
+    const userRole = req.user!.role;
+    const userDepartmentId = req.user!.departmentId;
+
+    // Check access control
+    const canAccess = await projectService.canUserAccessOrder(
+      userId,
+      userRole,
+      userDepartmentId,
+      orderId
+    );
+
+    if (!canAccess) {
+      res.status(403).json({ error: 'Access denied. You do not have permission to view this order timeline.' });
+      return;
+    }
+
+    const timeline = await schedulingEngine.recalculateOrderTimeline(orderId);
     res.json(timeline);
   } catch (error) {
     if (error instanceof Error && error.message === 'Order not found') {
@@ -133,7 +144,25 @@ router.get('/:id/timeline', async (req: AuthenticatedRequest, res: Response) => 
 // Check if order can meet deadline
 router.get('/:id/deadline-check', async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const check = await schedulingEngine.canMeetDeadline(req.params.id);
+    const orderId = req.params.id;
+    const userId = req.user!.id;
+    const userRole = req.user!.role;
+    const userDepartmentId = req.user!.departmentId;
+
+    // Check access control
+    const canAccess = await projectService.canUserAccessOrder(
+      userId,
+      userRole,
+      userDepartmentId,
+      orderId
+    );
+
+    if (!canAccess) {
+      res.status(403).json({ error: 'Access denied. You do not have permission to view this order.' });
+      return;
+    }
+
+    const check = await schedulingEngine.canMeetDeadline(orderId);
     res.json(check);
   } catch (error) {
     res.status(500).json({ error: 'Failed to check deadline' });
@@ -177,20 +206,7 @@ router.put('/:id', async (req: AuthenticatedRequest, res: Response) => {
       return;
     }
 
-    // Check if user can access this order
-    const hasAccess = await canUserAccessOrder(
-      req.user!.id,
-      req.user!.role,
-      req.user!.departmentId,
-      order
-    );
-
-    if (!hasAccess) {
-      res.status(403).json({ 
-        error: 'Access denied. You can only edit orders from your own department or orders where you are assigned to a task.' 
-      });
-      return;
-    }
+    // All users can edit all orders - no restrictions
 
     Object.assign(order, req.body);
     await orderRepository.save(order);
@@ -207,7 +223,25 @@ router.put('/:id', async (req: AuthenticatedRequest, res: Response) => {
 // Recalculate order timeline
 router.post('/:id/recalculate', async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const timeline = await schedulingEngine.recalculateOrderTimeline(req.params.id);
+    const orderId = req.params.id;
+    const userId = req.user!.id;
+    const userRole = req.user!.role;
+    const userDepartmentId = req.user!.departmentId;
+
+    // Check access control
+    const canAccess = await projectService.canUserAccessOrder(
+      userId,
+      userRole,
+      userDepartmentId,
+      orderId
+    );
+
+    if (!canAccess) {
+      res.status(403).json({ error: 'Access denied. You do not have permission to recalculate this order timeline.' });
+      return;
+    }
+
+    const timeline = await schedulingEngine.recalculateOrderTimeline(orderId);
     res.json(timeline);
   } catch (error) {
     if (error instanceof Error && error.message === 'Order not found') {
@@ -256,6 +290,40 @@ router.delete('/:id', async (req: AuthenticatedRequest, res: Response) => {
   } catch (error) {
     console.error('Failed to delete order:', error);
     res.status(500).json({ error: 'Failed to delete order' });
+  }
+});
+
+// Download comprehensive PDF report for an order
+router.get('/:id/pdf', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const orderId = req.params.id;
+    const userId = req.user!.id;
+    const userRole = req.user!.role;
+    const userDepartmentId = req.user!.departmentId;
+
+    // Check access control
+    const canAccess = await projectService.canUserAccessOrder(userId, userRole, userDepartmentId, orderId);
+    if (!canAccess) {
+      res.status(403).json({ error: 'Access denied to this order' });
+      return;
+    }
+
+    // Generate comprehensive PDF
+    const pdfBuffer = await pdfService.generateOrderPDF(orderId);
+
+    // Get order for filename
+    const orderRepository = getDataSource().getRepository(OrderEntity);
+    const order = await orderRepository.findOne({ where: { id: orderId } });
+    const filename = order 
+      ? `Project-Report-${order.orderNumber}-${new Date().toISOString().split('T')[0]}.pdf`
+      : `Project-Report-${orderId}.pdf`;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(pdfBuffer);
+  } catch (error) {
+    console.error('Failed to generate PDF:', error);
+    res.status(500).json({ error: 'Failed to generate PDF report' });
   }
 });
 

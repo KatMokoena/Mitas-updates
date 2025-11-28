@@ -1,4 +1,5 @@
-.requisition-form-overlay {
+.requisition-form-overlay,
+.procurement-form-overlay {
   position: fixed;
   top: 0;
   left: 0;
@@ -13,7 +14,8 @@
   padding: 20px;
 }
 
-.requisition-form-modal {
+.requisition-form-modal,
+.procurement-form-modal {
   background: var(--panel-glass);
   backdrop-filter: blur(12px) saturate(180%);
   -webkit-backdrop-filter: blur(12px) saturate(180%);
@@ -24,6 +26,61 @@
   width: 100%;
   max-height: 90vh;
   overflow-y: auto;
+  color: var(--text-main);
+}
+
+.procurement-form-modal {
+  max-width: 600px;
+}
+
+.procurement-form-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.procurement-form-header h3 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.procurement-form-content {
+  padding: 24px;
+}
+
+.tagged-users-list {
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  background: rgba(15, 23, 42, 0.3);
+}
+
+.user-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-base);
+}
+
+.user-checkbox-label:hover {
+  background: rgba(249, 115, 22, 0.1);
+}
+
+.user-checkbox-label input[type="checkbox"] {
+  cursor: pointer;
+}
+
+.user-checkbox-label span {
+  font-size: 13px;
   color: var(--text-main);
 }
 

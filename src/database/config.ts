@@ -12,7 +12,11 @@ import { DepartmentEntity } from './entities/Department';
 import { ConfigurationEntity } from './entities/Configuration';
 import { TaskInvitationEntity } from './entities/TaskInvitation';
 import { RequisitionEntity, RequisitionItemEntity } from './entities/Requisition';
+import { RequisitionStatusHistoryEntity } from './entities/RequisitionStatusHistory';
+import { RequisitionProofEntity } from './entities/RequisitionProof';
 import { AuditLogEntity } from './entities/AuditLog';
+import { TimeEntryEntity } from './entities/TimeEntry';
+import { CliftonStrengthsEntity } from './entities/CliftonStrengths';
 
 let AppDataSource: DataSource | null = null;
 
@@ -205,6 +209,46 @@ const runMigrations = async (queryRunner: any): Promise<void> => {
       console.log('createdBy column added to orders table successfully');
     }
 
+    // Check if projects table has departmentId column
+    const projectsTableInfo = await queryRunner.query(`PRAGMA table_info(projects);`);
+    const projectsHasDepartmentId = projectsTableInfo.some((col: any) => col.name === 'departmentId');
+    
+    if (!projectsHasDepartmentId) {
+      console.log('Adding departmentId column to projects table...');
+      await queryRunner.query(`ALTER TABLE projects ADD COLUMN "departmentId" varchar;`);
+      console.log('departmentId column added to projects table successfully');
+    }
+
+    // Check if time_entries table exists
+    const timeEntriesTable = await queryRunner.query(`
+      SELECT name FROM sqlite_master 
+      WHERE type='table' AND name='time_entries';
+    `);
+    
+    if (timeEntriesTable.length === 0) {
+      console.log('Creating time_entries table...');
+      await queryRunner.query(`
+        CREATE TABLE "time_entries" (
+          "id" varchar PRIMARY KEY NOT NULL,
+          "projectId" varchar NOT NULL,
+          "taskId" varchar,
+          "orderId" varchar,
+          "userId" varchar NOT NULL,
+          "entryType" varchar NOT NULL DEFAULT 'manual',
+          "status" varchar NOT NULL DEFAULT 'completed',
+          "startTime" datetime NOT NULL,
+          "endTime" datetime,
+          "durationHours" decimal(10,2) NOT NULL,
+          "description" text,
+          "notes" text,
+          "departmentId" varchar,
+          "createdAt" datetime NOT NULL,
+          "updatedAt" datetime NOT NULL
+        )
+      `);
+      console.log('time_entries table created successfully');
+    }
+
     // Check if task_invitations table exists
     const invitationsTable = await queryRunner.query(`
       SELECT name FROM sqlite_master 
@@ -226,6 +270,52 @@ const runMigrations = async (queryRunner: any): Promise<void> => {
         )
       `);
       console.log('task_invitations table created successfully');
+    }
+
+    // Check if clifton_strengths table exists
+    const cliftonStrengthsTable = await queryRunner.query(`
+      SELECT name FROM sqlite_master
+      WHERE type='table' AND name='clifton_strengths';
+    `);
+    
+    if (cliftonStrengthsTable.length === 0) {
+      console.log('Creating clifton_strengths table...');
+      await queryRunner.query(`
+        CREATE TABLE "clifton_strengths" (
+          "id" varchar PRIMARY KEY NOT NULL,
+          "userId" varchar NOT NULL,
+          "topStrengths" text NOT NULL,
+          "createdBy" varchar,
+          "updatedBy" varchar,
+          "createdAt" datetime NOT NULL,
+          "updatedAt" datetime NOT NULL
+        )
+      `);
+      console.log('clifton_strengths table created successfully');
+    }
+
+    // Check if requisition_proofs table exists
+    const requisitionProofsTable = await queryRunner.query(`
+      SELECT name FROM sqlite_master
+      WHERE type='table' AND name='requisition_proofs';
+    `);
+    
+    if (requisitionProofsTable.length === 0) {
+      console.log('Creating requisition_proofs table...');
+      await queryRunner.query(`
+        CREATE TABLE "requisition_proofs" (
+          "id" varchar PRIMARY KEY NOT NULL,
+          "requisitionId" varchar NOT NULL,
+          "uploadedBy" varchar NOT NULL,
+          "fileName" text NOT NULL,
+          "filePath" text NOT NULL,
+          "mimeType" text NOT NULL,
+          "fileSize" integer NOT NULL,
+          "description" text,
+          "uploadedAt" datetime NOT NULL
+        )
+      `);
+      console.log('requisition_proofs table created successfully');
     }
 
     // Check if users table has name and surname columns (legacy migration)
@@ -320,7 +410,7 @@ export const initializeDatabase = async (): Promise<void> => {
     AppDataSource = new DataSource({
       type: 'better-sqlite3',
       database: dbPath,
-      entities: [UserEntity, ProjectEntity, TaskEntity, ResourceEntity, DeliverableEntity, OrderEntity, PurchaseEntity, DepartmentEntity, ConfigurationEntity, TaskInvitationEntity, RequisitionEntity, RequisitionItemEntity, AuditLogEntity],
+      entities: [UserEntity, ProjectEntity, TaskEntity, ResourceEntity, DeliverableEntity, OrderEntity, PurchaseEntity, DepartmentEntity, ConfigurationEntity, TaskInvitationEntity, RequisitionEntity, RequisitionItemEntity, RequisitionStatusHistoryEntity, RequisitionProofEntity, AuditLogEntity, TimeEntryEntity, CliftonStrengthsEntity],
       synchronize: true, // Auto-sync schema in development - ensures all entities match
       logging: false,
     });

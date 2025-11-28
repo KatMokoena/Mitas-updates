@@ -5,6 +5,7 @@ import { useRouteAccess } from '../hooks/useRouteAccess';
 import InvitationsNotification from './InvitationsNotification';
 import RequisitionsNotification from './RequisitionsNotification';
 import RequisitionStatusNotification from './RequisitionStatusNotification';
+import CliftonStrengthsDisplay from './CliftonStrengthsDisplay';
 import './Layout.css';
 
 const Layout: React.FC = () => {
@@ -134,6 +135,10 @@ const Layout: React.FC = () => {
             </li>
           )}
         </ul>
+        
+        {/* CliftonStrengths Display */}
+        {user && <CliftonStrengthsDisplay userId={user.id} compact={true} />}
+        
         <div className="sidebar-footer">
           <div className="user-info">
             <span>{user?.name} {user?.surname}</span>

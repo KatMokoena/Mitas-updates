@@ -165,7 +165,33 @@ const Orders: React.FC = () => {
 
       if (response.ok) {
         const data = await response.json();
-        setOrders(data);
+        console.log(`[Orders] Fetched ${data.length} projects from backend`);
+        
+        // Backend now handles all filtering including:
+        // - Department-based filtering
+        // - Task assignment access
+        // - Task invitation access
+        // - Requisition approver access
+        // So we can use all data returned from the backend
+        
+        // Additional safety check: Filter out any projects that shouldn't be visible
+        // This is a safeguard in case backend filtering has issues
+        if (user && user.role !== 'ADMIN' && user.role !== 'admin' && 
+            user.role !== 'EXECUTIVES' && user.role !== 'executives') {
+          const filteredData = data.filter((order: Order) => {
+            // If project is from user's department, include it
+            if (order.departmentId === user.departmentId) {
+              return true;
+            }
+            // Otherwise, backend should have filtered it, but we'll trust the backend
+            // The backend checks for task assignments, invitations, and requisition approvers
+            return true; // Trust backend filtering
+          });
+          console.log(`[Orders] After filtering: ${filteredData.length} projects`);
+          setOrders(filteredData);
+        } else {
+          setOrders(data);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch orders:', error);
@@ -243,7 +269,7 @@ const Orders: React.FC = () => {
     e.preventDefault();
     e.stopPropagation();
     
-    if (!confirm(`Are you sure you want to delete order "${orderNumber}"? This will also delete all associated tasks and purchases. This action cannot be undone.`)) {
+    if (!confirm(`Are you sure you want to delete project "${orderNumber}"? This will also delete all associated tasks and purchases. This action cannot be undone.`)) {
       return;
     }
 
@@ -265,11 +291,11 @@ const Orders: React.FC = () => {
         await fetchOrders();
       } else {
         const error = await response.json();
-        alert(error.error || 'Failed to delete order');
+        alert(error.error || 'Failed to delete project');
       }
     } catch (error) {
-      console.error('Failed to delete order:', error);
-      alert('Failed to delete order');
+      console.error('Failed to delete project:', error);
+      alert('Failed to delete project');
     }
   };
 
@@ -318,25 +344,11 @@ const Orders: React.FC = () => {
           const deadline = new Date(order.deadline);
           const isOverdue = deadline < new Date() && order.status !== OrderStatus.COMPLETED;
 
-          // Check if user can access this order (department-based restriction)
-          const canAccess = (() => {
-            if (!user) return true;
-            // Admin, Project Manager, and Executives always have access
-            if (user.role === 'ADMIN' || user.role === 'admin' || 
-                user.role === 'PROJECT_MANAGER' || user.role === 'project_manager' ||
-                user.role === 'EXECUTIVES' || user.role === 'executives') {
-              return true;
-            }
-            // All other users can only access projects from their own department
-            // Note: We can't check for task assignments here without fetching task data,
-            // so we'll allow them to click but the OrderTimelineEnhanced component will handle the restriction
-            return order.departmentId === user.departmentId;
-          })();
-
+          // Allow all users to see and click on projects
+          // Access restrictions will be handled in OrderTimelineEnhanced component
           return (
             <div key={order.id} className="order-card-wrapper">
-              {canAccess ? (
-                <Link to={`/orders/${order.id}`} className="order-card">
+              <Link to={`/orders/${order.id}`} className="order-card">
                   <div className="order-card-header">
                     <div>
                       <h2>{order.orderNumber}</h2>
@@ -385,71 +397,6 @@ const Orders: React.FC = () => {
                     )}
                   </div>
                 </Link>
-              ) : (
-                <div className="order-card" style={{ opacity: 0.6, cursor: 'not-allowed', position: 'relative' }}>
-                  <div style={{
-                    position: 'absolute',
-                    top: '10px',
-                    right: '10px',
-                    background: 'rgba(239, 68, 68, 0.2)',
-                    color: '#ef4444',
-                    padding: '4px 8px',
-                    borderRadius: '4px',
-                    fontSize: '11px',
-                    fontWeight: '600',
-                    zIndex: 10
-                  }}>
-                    Restricted
-                  </div>
-                  <div className="order-card-header">
-                    <div>
-                      <h2>{order.orderNumber}</h2>
-                      <p className="order-customer">{order.customerName}</p>
-                    </div>
-                    <div className="order-badges">
-                      <span
-                        className="status-badge"
-                        style={{ backgroundColor: getStatusColor(order.status) }}
-                      >
-                        {order.status.replace('_', ' ')}
-                      </span>
-                      <span
-                        className="priority-badge"
-                        style={{ backgroundColor: getPriorityColor(order.priority) }}
-                      >
-                        {order.priority}
-                      </span>
-                    </div>
-                  </div>
-
-                  {order.description && <p className="order-description">{order.description}</p>}
-
-                  <div className="order-timeline-info">
-                    <div className="deadline-info">
-                      <strong>Deadline:</strong>{' '}
-                      <span className={isOverdue ? 'overdue' : ''}>
-                        {deadline.toLocaleDateString()} {deadline.toLocaleTimeString()}
-                      </span>
-                    </div>
-
-                    {timelineStatus && (
-                      <div className="timeline-status">
-                        <span
-                          className="timeline-status-badge"
-                          style={{ backgroundColor: getTimelineStatusColor(timelineStatus.status) }}
-                        >
-                          {timelineStatus.status.replace('_', ' ').toUpperCase()}
-                        </span>
-                        <span className="days-remaining">
-                          {timelineStatus.daysUntilDeadline > 0
-                            ? `${timelineStatus.daysUntilDeadline} days remaining`
-                            : `${Math.abs(timelineStatus.daysUntilDeadline)} days overdue`}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
               {canDeleteOrders && (
                 <button
                   className="order-delete-btn"

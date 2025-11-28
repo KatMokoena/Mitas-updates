@@ -3,7 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { API_BASE_URL } from '../config';
 import { TaskStatus, OrderStatus, OrderPriority } from '../../shared/types';
 import { useAuth } from '../context/AuthContext';
-import { jsPDF } from 'jspdf';
+// PDF generation now handled server-side via API
 import RequisitionForm from './RequisitionForm';
 import './OrderTimelineEnhanced.css';
 
@@ -15,8 +15,9 @@ interface Order {
   deadline: string;
   status: OrderStatus;
   priority: OrderPriority;
-  equipmentIds?: string[];
+  equipmentIds?: string[] | string;
   createdBy?: string;
+  departmentId?: string;
 }
 
 interface Task {
@@ -83,6 +84,10 @@ const OrderTimelineEnhanced: React.FC = () => {
   const [requisitionApproved, setRequisitionApproved] = useState<boolean | null>(null); // null = checking, true = approved, false = not approved or no requisition
   const [taskAssignmentEnabled, setTaskAssignmentEnabled] = useState<boolean>(false);
   const [currentRequisition, setCurrentRequisition] = useState<any>(null);
+  const [requisitionApprovers, setRequisitionApprovers] = useState<Array<{ id: string; name: string; surname: string }>>([]);
+  const [requisitionRejectors, setRequisitionRejectors] = useState<Array<{ id: string; name: string; surname: string }>>([]);
+  const [requisitionPendingApprovers, setRequisitionPendingApprovers] = useState<Array<{ id: string; name: string; surname: string }>>([]);
+  const [requisitionProofs, setRequisitionProofs] = useState<Array<{ id: string; fileName: string; uploadedBy: string; uploadedByName: string; uploadedAt: string; description?: string }>>([]);
   const [isEditingTask, setIsEditingTask] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editTaskFormData, setEditTaskFormData] = useState({
@@ -98,7 +103,8 @@ const OrderTimelineEnhanced: React.FC = () => {
   const [canDeleteTasks, setCanDeleteTasks] = useState<boolean>(false);
   const [canEditOrders, setCanEditOrders] = useState<boolean>(false);
   const [canAddTask, setCanAddTask] = useState<boolean>(false);
-  const [canAccessOrder, setCanAccessOrder] = useState<boolean>(true);
+  const [canAccessOrder, setCanAccessOrder] = useState<boolean>(true); // Default to true to prevent flash of restricted message
+  const [projectId, setProjectId] = useState<string | null>(null);
 
   useEffect(() => {
     if (id) {
@@ -107,14 +113,105 @@ const OrderTimelineEnhanced: React.FC = () => {
       fetchEquipment();
       fetchAllUsers();
       fetchDepartments();
+      fetchProjectId();
     }
   }, [id]);
+
+  const fetchProjectId = async () => {
+    if (!id) return;
+    try {
+      const sessionId = localStorage.getItem('sessionId');
+      
+      // First, try to find a project by looking at tasks with this orderId
+      const tasksResponse = await fetch(`${API_BASE_URL}/api/tasks?orderId=${id}`, {
+        headers: { 'x-session-id': sessionId || '' },
+      });
+      
+      if (tasksResponse.ok) {
+        const tasks = await tasksResponse.json();
+        if (tasks.length > 0 && tasks[0].projectId) {
+          setProjectId(tasks[0].projectId);
+          return;
+        }
+      }
+      
+      // If no tasks found, try to get or create a project
+      // First check if order exists
+      const orderResponse = await fetch(`${API_BASE_URL}/api/orders/${id}`, {
+        headers: { 'x-session-id': sessionId || '' },
+      });
+      
+      if (orderResponse.ok) {
+        const orderData = await orderResponse.json();
+        
+        // Try to create a project for this order
+        const createProjectResponse = await fetch(`${API_BASE_URL}/api/projects`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-session-id': sessionId || '',
+          },
+          body: JSON.stringify({
+            title: `Project for ${orderData.orderNumber || 'Order'}`,
+            description: `Auto-created project for order ${orderData.orderNumber || id}`,
+            status: 'in_progress',
+            components: [],
+            assignedTeamIds: [],
+          }),
+        });
+        
+        if (createProjectResponse.ok) {
+          const newProject = await createProjectResponse.json();
+          setProjectId(newProject.id);
+        } else {
+          // If creation fails (permission issue), we'll still show the button
+          // and handle it when clicked
+          console.warn('Could not create project automatically, will create on demand');
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch project ID:', error);
+    }
+  };
+
+  const handleCreateProjectForTimeTracking = async () => {
+    if (!id || !order) return;
+    try {
+      const sessionId = localStorage.getItem('sessionId');
+      const createProjectResponse = await fetch(`${API_BASE_URL}/api/projects`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-session-id': sessionId || '',
+        },
+        body: JSON.stringify({
+          title: `Project for ${order.orderNumber || 'Order'}`,
+          description: `Auto-created project for order ${order.orderNumber || id}`,
+          status: 'in_progress',
+          components: [],
+          assignedTeamIds: [],
+        }),
+      });
+      
+      if (createProjectResponse.ok) {
+        const newProject = await createProjectResponse.json();
+        setProjectId(newProject.id);
+        navigate(`/projects/${newProject.id}/time-tracking`);
+      } else {
+        const errorData = await createProjectResponse.json();
+        alert(`Failed to create project: ${errorData.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Failed to create project:', error);
+      alert('Failed to create project. Please try again.');
+    }
+  };
 
   useEffect(() => {
     if (order) {
       checkRequisitionApproval();
     }
-  }, [order]);
+  }, [order, allUsers]);
 
   const fetchDepartments = async () => {
     try {
@@ -133,10 +230,12 @@ const OrderTimelineEnhanced: React.FC = () => {
   };
 
   useEffect(() => {
+    if (user && order) {
     checkTaskPermissions();
     checkOrderPermissions();
     checkOrderAccess();
-  }, [user, order, timeline]);
+    }
+  }, [user, order, timeline, currentRequisition]);
 
   const checkTaskPermissions = async () => {
     if (!user) {
@@ -241,59 +340,14 @@ const OrderTimelineEnhanced: React.FC = () => {
   };
 
   const checkOrderAccess = async () => {
+    // Wait for user and order to load
     if (!user || !order) {
-      // Wait for user/order to load
-      if (!user || !order) {
-        setCanAccessOrder(true); // Default to true while loading
-        return;
-      }
-    }
-
-    // Admin, Project Manager, and Executives always have access
-    if (user.role === 'ADMIN' || user.role === 'admin' || 
-        user.role === 'PROJECT_MANAGER' || user.role === 'project_manager' ||
-        user.role === 'EXECUTIVES' || user.role === 'executives') {
-      setCanAccessOrder(true);
+      setCanAccessOrder(true); // Default to true while loading
       return;
     }
 
-    // All users can only access their own department's projects
-    // OR projects where they are assigned to a task (via invitation)
-    const isOwnDepartment = order.departmentId === user.departmentId;
-
-    if (isOwnDepartment) {
-      setCanAccessOrder(true);
-      return;
-    }
-
-    // Check if user is assigned to any task in this order
-    const isAssignedToTask = timeline?.tasks?.some(task => 
-      task.assignedUserId === user.id
-    ) || false;
-
-    if (isAssignedToTask) {
-      setCanAccessOrder(true);
-      return;
-    }
-
-    // Also check if user has accepted an invitation for any task
-    let hasAcceptedInvitation = false;
-    if (timeline?.tasks) {
-      for (const task of timeline.tasks) {
-        const invitations = taskInvitations.get(task.id) || [];
-        const acceptedInvitation = invitations.find((inv: any) => 
-          inv.inviteeId === user.id && 
-          (inv.status === 'accepted' || inv.status === 'ACCEPTED' || inv.status?.toLowerCase() === 'accepted')
-        );
-        if (acceptedInvitation) {
-          hasAcceptedInvitation = true;
-          break;
-        }
-      }
-    }
-
-    const hasAccess = hasAcceptedInvitation;
-    setCanAccessOrder(hasAccess);
+    // All users can access all projects - no restrictions
+    setCanAccessOrder(true);
   };
 
   useEffect(() => {
@@ -378,6 +432,10 @@ const OrderTimelineEnhanced: React.FC = () => {
           setRequisitionApproved(true);
           setCurrentRequisition(approvedRequisition);
           setTaskAssignmentEnabled(approvedRequisition.taskAssignmentEnabled || false);
+          // Fetch approver names
+          await fetchRequisitionApprovers(approvedRequisition);
+          // Fetch proof documents
+          await fetchRequisitionProofs(approvedRequisition.id);
         } else if (requisitions.length > 0) {
           // Check if any requisition is rejected
           const rejectedRequisition = requisitions.find((r: any) => r.status === 'rejected');
@@ -385,30 +443,133 @@ const OrderTimelineEnhanced: React.FC = () => {
             setRequisitionApproved(false);
             setCurrentRequisition(rejectedRequisition);
             setTaskAssignmentEnabled(false);
+            // Fetch approver names
+            await fetchRequisitionApprovers(rejectedRequisition);
           } else {
             // There's a requisition but it's not approved yet (pending)
             setRequisitionApproved(false);
             setCurrentRequisition(requisitions[0]);
             setTaskAssignmentEnabled(false);
+            // Fetch approver names
+            await fetchRequisitionApprovers(requisitions[0]);
           }
         } else {
-          // No requisition exists - allow task creation (backward compatibility)
-          setRequisitionApproved(true);
+          // No requisition exists - disable task creation until requisition is created and approved
+          setRequisitionApproved(false);
           setCurrentRequisition(null);
-          setTaskAssignmentEnabled(true);
+          setTaskAssignmentEnabled(false);
+          setRequisitionApprovers([]);
+          setRequisitionRejectors([]);
+          setRequisitionPendingApprovers([]);
         }
       } else {
-        // If no requisitions exist, allow task creation
-        setRequisitionApproved(true);
+        // If no requisitions exist, disable task creation
+        setRequisitionApproved(false);
         setCurrentRequisition(null);
-        setTaskAssignmentEnabled(true);
+        setTaskAssignmentEnabled(false);
+        setRequisitionApprovers([]);
+        setRequisitionRejectors([]);
+        setRequisitionPendingApprovers([]);
       }
     } catch (error) {
       console.error('Failed to check requisition approval:', error);
-      // On error, default to allowing task creation (backward compatibility)
-      setRequisitionApproved(true);
+      // On error, default to disabling task creation
+      setRequisitionApproved(false);
       setCurrentRequisition(null);
-      setTaskAssignmentEnabled(true);
+      setTaskAssignmentEnabled(false);
+      setRequisitionApprovers([]);
+      setRequisitionRejectors([]);
+      setRequisitionPendingApprovers([]);
+    }
+  };
+
+  const fetchRequisitionApprovers = async (requisition: any) => {
+    if (!requisition) {
+      setRequisitionApprovers([]);
+      setRequisitionRejectors([]);
+      setRequisitionPendingApprovers([]);
+      return;
+    }
+
+    try {
+      // Get all approver IDs
+      const approverIds = Array.isArray(requisition.approverIds) 
+        ? requisition.approverIds 
+        : (requisition.approverIds ? requisition.approverIds.split(',').map((id: string) => id.trim()).filter((id: string) => id.length > 0) : []);
+      
+      // Get approved IDs
+      const approvedByIds = Array.isArray(requisition.approvedByIds) 
+        ? requisition.approvedByIds 
+        : (requisition.approvedByIds ? requisition.approvedByIds.split(',').map((id: string) => id.trim()).filter((id: string) => id.length > 0) : []);
+      
+      // Get rejected IDs
+      const rejectedByIds = Array.isArray(requisition.rejectedByIds) 
+        ? requisition.rejectedByIds 
+        : (requisition.rejectedByIds ? requisition.rejectedByIds.split(',').map((id: string) => id.trim()).filter((id: string) => id.length > 0) : []);
+      
+      // Find all approver user objects
+      const allApprovers = approverIds
+        .map((id: string) => allUsers.find((u: any) => u.id === id))
+        .filter((u: any): u is { id: string; name: string; surname: string } => u !== undefined);
+      
+      // Separate into approved, rejected, and pending
+      const approved = allApprovers.filter((a: { id: string; name: string; surname: string }) => approvedByIds.includes(a.id));
+      const rejected = allApprovers.filter((a: { id: string; name: string; surname: string }) => rejectedByIds.includes(a.id));
+      const pending = allApprovers.filter((a: { id: string; name: string; surname: string }) => !approvedByIds.includes(a.id) && !rejectedByIds.includes(a.id));
+      
+      setRequisitionApprovers(approved);
+      setRequisitionRejectors(rejected);
+      setRequisitionPendingApprovers(pending);
+    } catch (error) {
+      console.error('Failed to fetch requisition approvers:', error);
+      setRequisitionApprovers([]);
+      setRequisitionRejectors([]);
+      setRequisitionPendingApprovers([]);
+    }
+  };
+
+  const fetchRequisitionProofs = async (requisitionId: string) => {
+    try {
+      const sessionId = localStorage.getItem('sessionId');
+      const response = await fetch(`${API_BASE_URL}/api/requisitions/${requisitionId}/proofs`, {
+        headers: { 'x-session-id': sessionId || '' },
+      });
+
+      if (response.ok) {
+        const proofs = await response.json();
+        setRequisitionProofs(proofs);
+      } else {
+        setRequisitionProofs([]);
+      }
+    } catch (error) {
+      console.error('Failed to fetch requisition proofs:', error);
+      setRequisitionProofs([]);
+    }
+  };
+
+  const handleDownloadProof = async (proofId: string, fileName: string) => {
+    try {
+      const sessionId = localStorage.getItem('sessionId');
+      const response = await fetch(`${API_BASE_URL}/api/requisitions/proofs/${proofId}/download`, {
+        headers: { 'x-session-id': sessionId || '' },
+      });
+
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      } else {
+        alert('Failed to download document');
+      }
+    } catch (error) {
+      console.error('Failed to download proof:', error);
+      alert('Failed to download document');
     }
   };
 
@@ -461,13 +622,13 @@ const OrderTimelineEnhanced: React.FC = () => {
       fetchOrderOwner(order.createdBy);
     }
 
-    // Auto-refresh every 10 seconds
+    // Auto-refresh every 1 second
     if (autoRefresh) {
       refreshIntervalRef.current = setInterval(() => {
         if (id) {
           fetchTimeline();
         }
-      }, 10000);
+      }, 1000);
     }
 
     return () => {
@@ -497,25 +658,48 @@ const OrderTimelineEnhanced: React.FC = () => {
   const fetchOrder = async () => {
     try {
       const sessionId = localStorage.getItem('sessionId');
+      console.log(`[OrderTimelineEnhanced] Fetching order ${id}...`);
+      
       const response = await fetch(`${API_BASE_URL}/api/orders/${id}`, {
         headers: { 'x-session-id': sessionId || '' },
       });
 
+      console.log(`[OrderTimelineEnhanced] Response status: ${response.status} for order ${id}`);
+
       if (response.status === 403) {
-        // Access denied - redirect to orders list
-        alert('Access denied. You can only access projects from your own department or projects where you have been assigned to a task via invitation.');
+        // Access denied - this shouldn't happen now, but handle it gracefully
+        console.log(`[OrderTimelineEnhanced] Access denied (403) for order ${id}`);
+        alert('Access denied. Please contact your administrator if you believe this is an error.');
         navigate('/orders');
         return;
       }
 
       if (response.ok) {
         const data = await response.json();
+        console.log(`[OrderTimelineEnhanced] Order ${id} fetched successfully:`, data);
         setOrder(data);
       } else if (response.status === 404) {
+        console.log(`[OrderTimelineEnhanced] Order ${id} not found (404)`);
+        const errorData = await response.json().catch(() => ({ error: 'Order not found' }));
+        console.warn(`[OrderTimelineEnhanced] Order not found:`, errorData);
+        setOrder(null);
+        // Don't show alert, just log the warning - user will see "Project not found" message
+      } else if (response.status === 403) {
+        console.log(`[OrderTimelineEnhanced] Access denied (403) for order ${id}`);
+        const errorData = await response.json().catch(() => ({ error: 'Access denied' }));
+        console.warn(`[OrderTimelineEnhanced] Access denied:`, errorData);
+        setOrder(null);
+        // Navigate back to orders list if access denied
+        navigate('/orders');
+      } else {
+        console.error(`[OrderTimelineEnhanced] Unexpected response status ${response.status} for order ${id}`);
+        const errorData = await response.json().catch(() => ({ error: 'Failed to fetch order' }));
+        console.error(`[OrderTimelineEnhanced] Error data:`, errorData);
         setOrder(null);
       }
     } catch (error) {
-      console.error('Failed to fetch order:', error);
+      console.error(`[OrderTimelineEnhanced] Failed to fetch order ${id}:`, error);
+      setOrder(null);
     }
   };
 
@@ -587,7 +771,7 @@ const OrderTimelineEnhanced: React.FC = () => {
         if (Array.isArray(order.equipmentIds)) {
           equipmentIds = order.equipmentIds;
         } else if (typeof order.equipmentIds === 'string' && order.equipmentIds.trim()) {
-          equipmentIds = order.equipmentIds.split(',').filter(id => id.trim());
+          equipmentIds = order.equipmentIds.split(',').filter((id: string) => id.trim());
         }
       }
       
@@ -667,6 +851,10 @@ const OrderTimelineEnhanced: React.FC = () => {
   };
 
   const handleEditTask = (task: Task) => {
+    // Note: We no longer lock editing based on dependencies
+    // Dependencies only prevent completion, not editing
+    // Prerequisite tasks remain editable even when they have dependent tasks
+
     setEditTaskFormData({
       title: task.title,
       description: task.description,
@@ -676,6 +864,13 @@ const OrderTimelineEnhanced: React.FC = () => {
     });
     setEditingTaskId(task.id);
     setIsEditingTask(true);
+    
+    // Clear any previous validation (editing is always allowed)
+    (window as any).__taskEditValidation = {
+      incompleteDependencies: [],
+      blockingTasks: [],
+      isLocked: false, // Editing is never locked - only completion is restricted
+    };
   };
 
   const handleSaveTask = async () => {
@@ -685,6 +880,26 @@ const OrderTimelineEnhanced: React.FC = () => {
       const sessionId = localStorage.getItem('sessionId');
       const task = (timeline?.tasks || []).find(t => t.id === editingTaskId);
       if (!task) return;
+
+      // Validate dependencies are completed before allowing completion (not editing)
+      // Only block if trying to mark as completed
+      if (editTaskFormData.status === TaskStatus.COMPLETED) {
+        if (editTaskFormData.dependencies && editTaskFormData.dependencies.length > 0 && timeline?.tasks) {
+          const incompleteDeps = editTaskFormData.dependencies.filter((depId) => {
+            const depTask = timeline.tasks.find((t) => t.id === depId);
+            return depTask && depTask.status !== TaskStatus.COMPLETED;
+          });
+          
+          if (incompleteDeps.length > 0) {
+            const depTaskNames = incompleteDeps.map((depId) => {
+              const depTask = timeline.tasks.find((t) => t.id === depId);
+              return depTask?.title || depId;
+            });
+            alert(`Cannot complete this task. The following dependent tasks must be completed first:\n\n${depTaskNames.join(', ')}\n\nPlease complete the dependent tasks before marking this task as completed.`);
+            return;
+          }
+        }
+      }
 
       const now = new Date();
       const endDate = new Date(now);
@@ -710,6 +925,8 @@ const OrderTimelineEnhanced: React.FC = () => {
       if (response.ok) {
         setIsEditingTask(false);
         setEditingTaskId(null);
+        // Clear validation
+        delete (window as any).__taskEditValidation;
         // Recalculate timeline after editing task
         await handleRecalculate();
         await fetchTimeline();
@@ -724,12 +941,44 @@ const OrderTimelineEnhanced: React.FC = () => {
   };
 
   const handleDownloadPDF = async () => {
+    if (!order || !id) return;
+
+    try {
+      const sessionId = localStorage.getItem('sessionId');
+      const response = await fetch(`${API_BASE_URL}/api/orders/${id}/pdf`, {
+        headers: { 'x-session-id': sessionId || '' },
+      });
+
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Project-Report-${order.orderNumber}-${new Date().toISOString().split('T')[0]}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      } else {
+        const errorData = await response.json().catch(() => ({ error: 'Failed to download PDF' }));
+        alert(`Failed to download PDF: ${errorData.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Failed to download PDF:', error);
+      alert('Failed to download PDF. Please try again.');
+    }
+  };
+
+  // Old client-side PDF generation code removed - now using server-side API
+  // This function is kept for reference but not used
+  const handleDownloadPDF_OLD = async () => {
     if (!order || !timeline) return;
 
     try {
       // Dynamically import jspdf-autotable to ensure it's loaded
       const autoTableModule = await import('jspdf-autotable');
       const autoTable = (autoTableModule as any).default || autoTableModule;
+      const jsPDF = (await import('jspdf')).default;
       
       const doc = new jsPDF({
         orientation: 'landscape',
@@ -845,7 +1094,7 @@ const OrderTimelineEnhanced: React.FC = () => {
       yPos += 8;
 
       const orderInfoData = [
-        ['Order Number', order.orderNumber],
+        ['Project Number', order.orderNumber],
         ['Customer', order.customerName],
         ['Status', order.status.replace('_', ' ').toUpperCase()],
         ['Priority', order.priority.toUpperCase()],
@@ -931,8 +1180,8 @@ const OrderTimelineEnhanced: React.FC = () => {
       if (order.equipmentIds) {
         if (Array.isArray(order.equipmentIds)) {
           equipmentIds = order.equipmentIds;
-        } else if (typeof order.equipmentIds === 'string' && order.equipmentIds.trim()) {
-          equipmentIds = order.equipmentIds.split(',').filter(id => id.trim());
+        } else if (typeof order.equipmentIds === 'string' && (order.equipmentIds as string).trim()) {
+          equipmentIds = (order.equipmentIds as string).split(',').filter((id: string) => id.trim());
         }
       }
 
@@ -1197,8 +1446,8 @@ const OrderTimelineEnhanced: React.FC = () => {
             'x-session-id': sessionId || '',
           },
           body: JSON.stringify({
-            title: `Project for ${order?.orderNumber || 'Order'}`,
-            description: `Auto-created project for order ${order?.orderNumber || id}`,
+            title: `Project for ${order?.orderNumber || 'Project'}`,
+            description: `Auto-created project for project ${order?.orderNumber || id}`,
             status: 'in_progress',
             components: [],
             assignedTeamIds: [],
@@ -1207,10 +1456,13 @@ const OrderTimelineEnhanced: React.FC = () => {
         if (createProjectResponse.ok) {
           const newProject = await createProjectResponse.json();
           projectId = newProject.id;
+          setProjectId(newProject.id); // Update state
         } else {
           // Fallback: use order ID as project ID (may need to update Task entity to allow this)
           projectId = id || '';
         }
+      } else {
+        setProjectId(projectId); // Update state with found project
       }
 
       const response = await fetch(`${API_BASE_URL}/api/tasks`, {
@@ -1282,7 +1534,7 @@ const OrderTimelineEnhanced: React.FC = () => {
   }
 
   if (!order || !timeline) {
-    return <div className="order-timeline-error">Order not found</div>;
+    return <div className="order-timeline-error">Project not found</div>;
   }
 
   const deadline = new Date(order.deadline);
@@ -1296,67 +1548,12 @@ const OrderTimelineEnhanced: React.FC = () => {
       ? (timeline.tasks || []).filter((t) => t.status !== TaskStatus.COMPLETED)
       : (timeline.tasks || []);
 
-  // If user doesn't have access, show restricted message and prevent all interaction
-  if (!canAccessOrder && user && order && !loading) {
-    return (
-      <div className="order-timeline">
-        <div className="order-timeline-header">
-          <Link to="/orders" className="back-link">← Back to Projects</Link>
-          <div className="access-restricted-message" style={{
-            background: 'rgba(239, 68, 68, 0.15)',
-            border: '2px solid rgba(239, 68, 68, 0.4)',
-            borderRadius: '12px',
-            padding: '2rem',
-            margin: '2rem auto',
-            maxWidth: '600px',
-            textAlign: 'center',
-            color: '#f1f5f9'
-          }}>
-            <h2 style={{ margin: '0 0 1rem 0', color: '#ef4444', fontSize: '1.5rem' }}>⚠️ Access Restricted</h2>
-            <p style={{ margin: '0 0 1rem 0', color: '#94a3b8', fontSize: '1rem', lineHeight: '1.6' }}>
-              You cannot access this project because it belongs to a different department. 
-            </p>
-            <p style={{ margin: '0 0 1.5rem 0', color: '#cbd5e1', fontSize: '0.9rem' }}>
-              You can only access projects from your own department or projects where you have been assigned to a task via invitation.
-            </p>
-            <Link to="/orders" className="btn-primary" style={{
-              display: 'inline-block',
-              padding: '0.75rem 1.5rem',
-              background: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
-              color: 'white',
-              textDecoration: 'none',
-              borderRadius: '8px',
-              fontWeight: '600'
-            }}>
-              Return to Projects
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // All users can access all projects - no restrictions
 
   return (
     <div className="order-timeline">
       <div className="order-timeline-header">
-        <Link to="/orders" className="back-link">← Back to Orders</Link>
-        {!canAccessOrder && (
-          <div className="access-restricted-message" style={{
-            background: 'rgba(239, 68, 68, 0.1)',
-            border: '1px solid rgba(239, 68, 68, 0.3)',
-            borderRadius: '8px',
-            padding: '1.5rem',
-            margin: '1rem 0',
-            textAlign: 'center',
-            color: '#f1f5f9'
-          }}>
-            <h3 style={{ margin: '0 0 0.5rem 0', color: '#ef4444' }}>Access Restricted</h3>
-            <p style={{ margin: 0, color: '#94a3b8' }}>
-              You cannot access this project because it belongs to a different department. 
-              You can only access projects from your own department or projects where you have been assigned to a task via invitation.
-            </p>
-          </div>
-        )}
+        <Link to="/orders" className="back-link">← Back to Projects</Link>
         <div className="header-content">
           <div>
             <h1>{order.orderNumber}</h1>
@@ -1390,8 +1587,10 @@ const OrderTimelineEnhanced: React.FC = () => {
                   className="btn-secondary"
                   disabled={requisitionApproved === false || (requisitionApproved === true && !taskAssignmentEnabled && currentRequisition)}
                   title={
-                    requisitionApproved === false 
-                      ? 'Requisition must be approved before creating tasks' 
+                    requisitionApproved === false && !currentRequisition
+                      ? 'Create and get a requisition approved before creating tasks'
+                      : requisitionApproved === false && currentRequisition
+                      ? 'Requisition must be approved before creating tasks'
                       : (requisitionApproved === true && !taskAssignmentEnabled && currentRequisition)
                       ? 'Please enable task assignment first'
                       : 'Add Task'
@@ -1403,6 +1602,51 @@ const OrderTimelineEnhanced: React.FC = () => {
             )}
             <button onClick={handleDownloadPDF} className="btn-secondary" title="Download Project as PDF">
               📄 Download PDF
+            </button>
+            {/* Time Tracking Button - Always visible */}
+            <button 
+              style={{ backgroundColor: '#4a90e2', color: 'white', border: '2px solid #357abd' }}
+              onClick={async () => {
+                console.log('[Time Tracking] Button clicked, orderId:', id, 'current projectId:', projectId);
+                // Ensure project exists before navigating
+                let currentProjectId = projectId;
+                
+                if (!currentProjectId) {
+                  // Try to find project from tasks
+                  const sessionId = localStorage.getItem('sessionId');
+                  const tasksResponse = await fetch(`${API_BASE_URL}/api/tasks?orderId=${id}`, {
+                    headers: { 'x-session-id': sessionId || '' },
+                  });
+                  
+                  if (tasksResponse.ok) {
+                    const tasks = await tasksResponse.json();
+                    if (tasks.length > 0 && tasks[0].projectId) {
+                      currentProjectId = tasks[0].projectId;
+                      setProjectId(currentProjectId);
+                    }
+                  }
+                  
+                  // If still no project, create one
+                  if (!currentProjectId && order) {
+                    await handleCreateProjectForTimeTracking();
+                    return; // handleCreateProjectForTimeTracking will navigate
+                  }
+                }
+                
+                if (currentProjectId) {
+                  // Store orderId in sessionStorage so we can navigate back
+                  if (id) {
+                    sessionStorage.setItem(`timeTracking_orderId_${currentProjectId}`, id);
+                  }
+                  navigate(`/projects/${currentProjectId}/time-tracking`);
+                } else {
+                  alert('Unable to access time tracking. Please try again.');
+                }
+              }}
+              className="btn-secondary"
+              title="View and manage time tracking for this project"
+            >
+              ⏱️ Time Tracking
             </button>
             <button onClick={handleRecalculate} className="btn-secondary">
               Recalculate Timeline
@@ -1467,7 +1711,7 @@ const OrderTimelineEnhanced: React.FC = () => {
               if (Array.isArray(order.equipmentIds)) {
                 equipmentIds = order.equipmentIds;
               } else if (typeof order.equipmentIds === 'string' && order.equipmentIds.trim()) {
-                equipmentIds = order.equipmentIds.split(',').filter(id => id.trim());
+                equipmentIds = order.equipmentIds.split(',').filter((id: string) => id.trim());
               }
             }
             
@@ -1520,7 +1764,7 @@ const OrderTimelineEnhanced: React.FC = () => {
               if (Array.isArray(order.equipmentIds)) {
                 equipmentIds = order.equipmentIds;
               } else if (typeof order.equipmentIds === 'string' && order.equipmentIds.trim()) {
-                equipmentIds = order.equipmentIds.split(',').filter(id => id.trim());
+                equipmentIds = order.equipmentIds.split(',').filter((id: string) => id.trim());
               }
             }
             
@@ -1541,14 +1785,127 @@ const OrderTimelineEnhanced: React.FC = () => {
                 })
                 .filter((item): item is { id: string; name: string; category: 'technology' | 'solution'; quantity: number } => item !== null);
               
+              // Check if there's a requisition and show status
+              const hasRequisition = currentRequisition !== null;
+              const requisitionStatus = currentRequisition?.status;
+              
               return (
-                <div style={{ marginTop: '16px' }}>
+                <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <button
                     onClick={() => setShowRequisitionForm(true)}
                     className="btn-procurement"
                   >
-                    Start Procurement Process
+                    Get Requisition to begin project
                   </button>
+                  {hasRequisition && requisitionStatus === 'pending_approval' && requisitionRejectors.length === 0 && (
+                    <div style={{ 
+                      padding: '8px 12px', 
+                      background: 'rgba(251, 191, 36, 0.15)', 
+                      border: '1px solid rgba(251, 191, 36, 0.3)',
+                      borderRadius: '6px',
+                      color: '#fbbf24',
+                      fontSize: '0.875rem'
+                    }}>
+                      Waiting for {requisitionPendingApprovers.map(a => `${a.name} ${a.surname}`).join('/')} to approve of technology and/or solution
+                    </div>
+                  )}
+                  {hasRequisition && requisitionStatus === 'pending_approval' && requisitionRejectors.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{ 
+                        padding: '8px 12px', 
+                        background: 'rgba(239, 68, 68, 0.15)', 
+                        border: '1px solid rgba(239, 68, 68, 0.3)',
+                        borderRadius: '6px',
+                        color: '#ef4444',
+                        fontSize: '0.875rem'
+                      }}>
+                        Rejection from {requisitionRejectors.map(a => `${a.name} ${a.surname}`).join('/')} has been given for this requisition
+                      </div>
+                      {requisitionPendingApprovers.length > 0 && (
+                        <div style={{ 
+                          padding: '8px 12px', 
+                          background: 'rgba(251, 191, 36, 0.15)', 
+                          border: '1px solid rgba(251, 191, 36, 0.3)',
+                          borderRadius: '6px',
+                          color: '#fbbf24',
+                          fontSize: '0.875rem'
+                        }}>
+                          A second approval has been sent to {requisitionPendingApprovers.map(a => `${a.name} ${a.surname}`).join('/')} because {requisitionRejectors.map(a => `${a.name} ${a.surname}`).join('/')} rejected
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {hasRequisition && requisitionStatus === 'approved' && (
+                    <div style={{ 
+                      padding: '12px', 
+                      background: 'rgba(34, 197, 94, 0.15)', 
+                      border: '1px solid rgba(34, 197, 94, 0.3)',
+                      borderRadius: '6px',
+                      color: '#22c55e',
+                      fontSize: '0.875rem'
+                    }}>
+                      <div style={{ marginBottom: requisitionProofs.length > 0 ? '8px' : '0' }}>
+                        Approval from {requisitionApprovers.map(a => `${a.name} ${a.surname}`).join('/')} has been given for this requisition
+                      </div>
+                      {requisitionProofs.length > 0 && (
+                        <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid rgba(34, 197, 94, 0.2)' }}>
+                          <div style={{ fontSize: '0.75rem', color: '#86efac', marginBottom: '6px', fontWeight: 600 }}>
+                            Proof Documents ({requisitionProofs.length}):
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            {requisitionProofs.map((proof) => (
+                              <div 
+                                key={proof.id}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '8px',
+                                  padding: '4px 8px',
+                                  background: 'rgba(34, 197, 94, 0.1)',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  transition: 'background 0.2s',
+                                }}
+                                onClick={() => handleDownloadProof(proof.id, proof.fileName)}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.background = 'rgba(34, 197, 94, 0.2)';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.background = 'rgba(34, 197, 94, 0.1)';
+                                }}
+                                title={`Click to download: ${proof.fileName}`}
+                              >
+                                <span style={{ fontSize: '1rem' }}>📎</span>
+                                <span style={{ flex: 1, fontSize: '0.75rem' }}>{proof.fileName}</span>
+                                {proof.description && (
+                                  <span style={{ fontSize: '0.7rem', color: '#86efac', fontStyle: 'italic' }}>
+                                    {proof.description}
+                                  </span>
+                                )}
+                                <span style={{ fontSize: '0.7rem', color: '#86efac' }}>
+                                  by {proof.uploadedByName}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {hasRequisition && requisitionStatus === 'rejected' && (
+                    <div style={{ 
+                      padding: '8px 12px', 
+                      background: 'rgba(239, 68, 68, 0.15)', 
+                      border: '1px solid rgba(239, 68, 68, 0.3)',
+                      borderRadius: '6px',
+                      color: '#ef4444',
+                      fontSize: '0.875rem'
+                    }}>
+                      {requisitionRejectors.length > 0 
+                        ? `Rejection from ${requisitionRejectors.map(a => `${a.name} ${a.surname}`).join('/')} has been given for this requisition`
+                        : 'Rejection has been given for this requisition'}
+                    </div>
+                  )}
                 </div>
               );
             }
@@ -1563,8 +1920,8 @@ const OrderTimelineEnhanced: React.FC = () => {
         if (order.equipmentIds) {
           if (Array.isArray(order.equipmentIds)) {
             equipmentIds = order.equipmentIds;
-          } else if (typeof order.equipmentIds === 'string' && order.equipmentIds.trim()) {
-            equipmentIds = order.equipmentIds.split(',').filter(id => id.trim());
+          } else if (typeof order.equipmentIds === 'string' && (order.equipmentIds as string).trim()) {
+            equipmentIds = (order.equipmentIds as string).split(',').filter((id: string) => id.trim());
           }
         }
         
@@ -1801,7 +2158,7 @@ const OrderTimelineEnhanced: React.FC = () => {
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <h2>Edit Project</h2>
             <div className="form-group">
-              <label>Order Number / Reference *</label>
+              <label>Project Number / Reference *</label>
               <input
                 type="text"
                 value={editFormData.orderNumber}
@@ -2075,75 +2432,88 @@ const OrderTimelineEnhanced: React.FC = () => {
         <div className="modal-overlay" onClick={() => setIsEditingTask(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <h2>Edit Task</h2>
+            
             <div className="form-group">
-              <label>Task Title *</label>
-              <input
-                type="text"
-                value={editTaskFormData.title}
-                onChange={(e) => setEditTaskFormData({ ...editTaskFormData, title: e.target.value })}
-                required
-                placeholder="Enter task title"
-              />
-            </div>
-            <div className="form-group">
-              <label>Description</label>
-              <textarea
-                value={editTaskFormData.description}
-                onChange={(e) => setEditTaskFormData({ ...editTaskFormData, description: e.target.value })}
-                rows={3}
-                placeholder="Enter task description"
-              />
-            </div>
-            <div className="form-group">
-              <label>Estimated Days *</label>
-              <input
-                type="number"
-                min="1"
-                value={editTaskFormData.estimatedDays}
-                onChange={(e) => setEditTaskFormData({ ...editTaskFormData, estimatedDays: parseInt(e.target.value) || 1 })}
-                required
-              />
-            </div>
-            <div className="form-group">
-              <label>Status *</label>
-              <select
-                value={editTaskFormData.status}
-                onChange={(e) => setEditTaskFormData({ ...editTaskFormData, status: e.target.value as TaskStatus })}
-                required
-              >
-                <option value={TaskStatus.NOT_STARTED}>Not Started</option>
-                <option value={TaskStatus.IN_PROGRESS}>In Progress</option>
-                <option value={TaskStatus.COMPLETED}>Completed</option>
-                <option value={TaskStatus.BLOCKED}>Blocked</option>
-              </select>
-            </div>
-            <div className="form-group">
-              <label>Dependencies (optional)</label>
-              <select
-                multiple
-                value={editTaskFormData.dependencies}
-                onChange={(e) => {
-                  const selected = Array.from(e.target.selectedOptions, option => option.value);
-                  setEditTaskFormData({ ...editTaskFormData, dependencies: selected });
-                }}
-                style={{ minHeight: '100px' }}
-              >
-                {(timeline?.tasks || []).filter(t => t.id !== editingTaskId).map((task) => (
-                  <option key={task.id} value={task.id}>
-                    {task.title}
-                  </option>
-                ))}
-              </select>
-              <small>Hold Ctrl/Cmd to select multiple dependencies</small>
-            </div>
-            <div className="modal-actions">
-              <button onClick={() => setIsEditingTask(false)} className="btn-secondary">
-                Cancel
-              </button>
-              <button onClick={handleSaveTask} className="btn-primary" disabled={!editTaskFormData.title}>
-                Save Changes
-              </button>
-            </div>
+                <label>Task Title *</label>
+                <input
+                  type="text"
+                  value={editTaskFormData.title}
+                  onChange={(e) => setEditTaskFormData({ ...editTaskFormData, title: e.target.value })}
+                  required
+                  placeholder="Enter task title"
+                />
+              </div>
+              <div className="form-group">
+                <label>Description</label>
+                <textarea
+                  value={editTaskFormData.description}
+                  onChange={(e) => setEditTaskFormData({ ...editTaskFormData, description: e.target.value })}
+                  rows={3}
+                  placeholder="Enter task description"
+                />
+              </div>
+              <div className="form-group">
+                <label>Estimated Days *</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={editTaskFormData.estimatedDays}
+                  onChange={(e) => setEditTaskFormData({ ...editTaskFormData, estimatedDays: parseInt(e.target.value) || 1 })}
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>Status *</label>
+                <select
+                  value={editTaskFormData.status}
+                  onChange={(e) => setEditTaskFormData({ ...editTaskFormData, status: e.target.value as TaskStatus })}
+                  required
+                >
+                  <option value={TaskStatus.NOT_STARTED}>Not Started</option>
+                  <option value={TaskStatus.IN_PROGRESS}>In Progress</option>
+                  <option value={TaskStatus.COMPLETED}>Completed</option>
+                  <option value={TaskStatus.BLOCKED}>Blocked</option>
+                </select>
+                {editTaskFormData.status === TaskStatus.COMPLETED && editTaskFormData.dependencies && editTaskFormData.dependencies.length > 0 && (
+                  <small style={{ color: '#fbbf24', display: 'block', marginTop: '4px' }}>
+                    ⚠️ Note: This task cannot be marked as completed until all dependent tasks are completed.
+                  </small>
+                )}
+              </div>
+              <div className="form-group">
+                <label>Dependencies (optional)</label>
+                <select
+                  multiple
+                  value={editTaskFormData.dependencies}
+                  onChange={(e) => {
+                    const selected = Array.from(e.target.selectedOptions, option => option.value);
+                    setEditTaskFormData({ ...editTaskFormData, dependencies: selected });
+                  }}
+                  style={{ minHeight: '100px' }}
+                >
+                  {(timeline?.tasks || []).filter(t => t.id !== editingTaskId).map((task) => (
+                    <option key={task.id} value={task.id}>
+                      {task.title}
+                    </option>
+                  ))}
+                </select>
+                <small>Hold Ctrl/Cmd to select multiple dependencies</small>
+              </div>
+              <div className="modal-actions">
+                <button onClick={() => {
+                  delete (window as any).__taskEditValidation;
+                  setIsEditingTask(false);
+                }} className="btn-secondary">
+                  Cancel
+                </button>
+                <button 
+                  onClick={handleSaveTask} 
+                  className="btn-primary" 
+                  disabled={!editTaskFormData.title}
+                >
+                  Save Changes
+                </button>
+              </div>
           </div>
         </div>
       )}

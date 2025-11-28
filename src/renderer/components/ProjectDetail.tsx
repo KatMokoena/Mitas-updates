@@ -202,6 +202,10 @@ const ProjectDetail: React.FC = () => {
   };
 
   const handleEditTask = (task: Task) => {
+    // Note: We no longer lock editing based on dependencies
+    // Dependencies only prevent completion, not editing
+    // Prerequisite tasks remain editable even when they have dependent tasks
+
     setEditingTask(task);
     setTaskFormData({
       title: task.title,
@@ -216,6 +220,13 @@ const ProjectDetail: React.FC = () => {
       milestone: task.milestone,
     });
     setShowTaskModal(true);
+    
+    // Clear any previous validation (editing is always allowed)
+    (window as any).__taskEditValidation = {
+      incompleteDependencies: [],
+      blockingTasks: [],
+      isLocked: false, // Editing is never locked - only completion is restricted
+    };
   };
 
   const handleDeleteTask = async (taskId: string) => {
@@ -238,6 +249,44 @@ const ProjectDetail: React.FC = () => {
 
   const handleTaskSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Check validation before saving (only for editing, not creating)
+    if (editingTask) {
+      const validation = (window as any).__taskEditValidation;
+      if (validation && validation.isLocked) {
+        let message = 'Cannot edit this task:\n\n';
+        if (validation.incompleteDependencies.length > 0) {
+          message += `• This task depends on incomplete tasks: ${validation.incompleteDependencies.join(', ')}\n`;
+          message += '  Please complete the dependent tasks first.\n\n';
+        }
+        if (validation.blockingTasks.length > 0) {
+          message += `• This task is a dependency of incomplete tasks: ${validation.blockingTasks.join(', ')}\n`;
+          message += '  Please complete those tasks first before editing this one.\n';
+        }
+        alert(message);
+        return;
+      }
+
+      // Validate dependencies are completed before allowing completion (not editing)
+      // Only block if trying to mark as completed
+      if (taskFormData.status === TaskStatus.COMPLETED) {
+        if (taskFormData.dependencies && taskFormData.dependencies.length > 0) {
+          const incompleteDeps = taskFormData.dependencies.filter((depId) => {
+            const depTask = tasks.find((t) => t.id === depId);
+            return depTask && depTask.status !== TaskStatus.COMPLETED;
+          });
+          
+          if (incompleteDeps.length > 0) {
+            const depTaskNames = incompleteDeps.map((depId) => {
+              const depTask = tasks.find((t) => t.id === depId);
+              return depTask?.title || depId;
+            });
+            alert(`Cannot complete this task. The following dependent tasks must be completed first:\n\n${depTaskNames.join(', ')}\n\nPlease complete the dependent tasks before marking this task as completed.`);
+            return;
+          }
+        }
+      }
+    }
 
     try {
       const sessionId = localStorage.getItem('sessionId');
@@ -263,6 +312,9 @@ const ProjectDetail: React.FC = () => {
 
       if (response.ok) {
         setShowTaskModal(false);
+        setEditingTask(null);
+        // Clear validation
+        delete (window as any).__taskEditValidation;
         fetchTasks();
         // Update resource allocations
         updateResourceAllocations();
@@ -454,61 +506,70 @@ const ProjectDetail: React.FC = () => {
       </div>
 
       {showTaskModal && (
-        <div className="modal-overlay" onClick={() => setShowTaskModal(false)}>
+        <div className="modal-overlay" onClick={() => {
+          delete (window as any).__taskEditValidation;
+          setShowTaskModal(false);
+        }}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <h2>{editingTask ? 'Edit Task' : 'Create Task'}</h2>
+            
             <form onSubmit={handleTaskSubmit}>
-              <div className="form-group">
-                <label>Title</label>
-                <input
-                  type="text"
-                  value={taskFormData.title}
-                  onChange={(e) => setTaskFormData({ ...taskFormData, title: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="form-group">
-                <label>Description</label>
-                <textarea
-                  value={taskFormData.description}
-                  onChange={(e) => setTaskFormData({ ...taskFormData, description: e.target.value })}
-                  rows={3}
-                  required
-                />
-              </div>
-              <div className="form-row">
                 <div className="form-group">
-                  <label>Start Date</label>
+                  <label>Title</label>
                   <input
-                    type="date"
-                    value={taskFormData.startDate}
-                    onChange={(e) => setTaskFormData({ ...taskFormData, startDate: e.target.value })}
+                    type="text"
+                    value={taskFormData.title}
+                    onChange={(e) => setTaskFormData({ ...taskFormData, title: e.target.value })}
                     required
+                    disabled={isLocked}
                   />
                 </div>
                 <div className="form-group">
-                  <label>End Date</label>
-                  <input
-                    type="date"
-                    value={taskFormData.endDate}
-                    onChange={(e) => setTaskFormData({ ...taskFormData, endDate: e.target.value })}
+                  <label>Description</label>
+                  <textarea
+                    value={taskFormData.description}
+                    onChange={(e) => setTaskFormData({ ...taskFormData, description: e.target.value })}
+                    rows={3}
                     required
+                    disabled={isLocked}
                   />
                 </div>
-              </div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Estimated Days</label>
-                  <input
-                    type="number"
-                    value={taskFormData.estimatedDays}
-                    onChange={(e) =>
-                      setTaskFormData({ ...taskFormData, estimatedDays: parseInt(e.target.value) })
-                    }
-                    min="1"
-                    required
-                  />
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Start Date</label>
+                    <input
+                      type="date"
+                      value={taskFormData.startDate}
+                      onChange={(e) => setTaskFormData({ ...taskFormData, startDate: e.target.value })}
+                      required
+                      disabled={isLocked}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>End Date</label>
+                    <input
+                      type="date"
+                      value={taskFormData.endDate}
+                      onChange={(e) => setTaskFormData({ ...taskFormData, endDate: e.target.value })}
+                      required
+                      disabled={isLocked}
+                    />
+                  </div>
                 </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Estimated Days</label>
+                    <input
+                      type="number"
+                      value={taskFormData.estimatedDays}
+                      onChange={(e) =>
+                        setTaskFormData({ ...taskFormData, estimatedDays: parseInt(e.target.value) })
+                      }
+                      min="1"
+                      required
+                      disabled={isLocked}
+                    />
+                  </div>
                 <div className="form-group">
                   <label>Status</label>
                   <select
@@ -521,108 +582,122 @@ const ProjectDetail: React.FC = () => {
                       </option>
                     ))}
                   </select>
-                </div>
-              </div>
-              <div className="form-group">
-                <label>Assigned User</label>
-                <select
-                  value={taskFormData.assignedUserId}
-                  onChange={(e) => setTaskFormData({ ...taskFormData, assignedUserId: e.target.value })}
-                >
-                  <option value="">Unassigned</option>
-                  {users.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.username}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="form-group">
-                <label>Resources (Labour & Equipment)</label>
-                <div className="resource-checkboxes">
-                  {resources.map((resource) => (
-                    <label key={resource.id} className="resource-checkbox">
-                      <input
-                        type="checkbox"
-                        checked={taskFormData.resourceIds.includes(resource.id)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setTaskFormData({
-                              ...taskFormData,
-                              resourceIds: [...taskFormData.resourceIds, resource.id],
-                            });
-                          } else {
-                            setTaskFormData({
-                              ...taskFormData,
-                              resourceIds: taskFormData.resourceIds.filter((id) => id !== resource.id),
-                            });
-                          }
-                        }}
-                      />
-                      <span>
-                        {resource.name} ({resource.type})
-                      </span>
-                    </label>
-                  ))}
-                  {resources.length === 0 && (
-                    <p className="hint-text">No resources available. Create resources first.</p>
+                  {taskFormData.status === TaskStatus.COMPLETED && taskFormData.dependencies && taskFormData.dependencies.length > 0 && (
+                    <small style={{ color: '#fbbf24', display: 'block', marginTop: '4px' }}>
+                      ⚠️ Note: This task cannot be marked as completed until all dependent tasks are completed.
+                    </small>
                   )}
                 </div>
-              </div>
-              <div className="form-group">
-                <label>Dependencies (Tasks this depends on)</label>
-                <div className="dependency-checkboxes">
-                  {tasks
-                    .filter((t) => !editingTask || t.id !== editingTask.id)
-                    .map((task) => (
-                      <label key={task.id} className="dependency-checkbox">
+                </div>
+                <div className="form-group">
+                  <label>Assigned User</label>
+                  <select
+                    value={taskFormData.assignedUserId}
+                    onChange={(e) => setTaskFormData({ ...taskFormData, assignedUserId: e.target.value })}
+                  >
+                    <option value="">Unassigned</option>
+                    {users.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.username}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Resources (Labour & Equipment)</label>
+                  <div className="resource-checkboxes">
+                    {resources.map((resource) => (
+                      <label key={resource.id} className="resource-checkbox">
                         <input
                           type="checkbox"
-                          checked={taskFormData.dependencies.includes(task.id)}
+                          checked={taskFormData.resourceIds.includes(resource.id)}
                           onChange={(e) => {
                             if (e.target.checked) {
                               setTaskFormData({
                                 ...taskFormData,
-                                dependencies: [...taskFormData.dependencies, task.id],
+                                resourceIds: [...taskFormData.resourceIds, resource.id],
                               });
                             } else {
                               setTaskFormData({
                                 ...taskFormData,
-                                dependencies: taskFormData.dependencies.filter((id) => id !== task.id),
+                                resourceIds: taskFormData.resourceIds.filter((id) => id !== resource.id),
                               });
                             }
                           }}
                         />
-                        <span>{task.title}</span>
+                        <span>
+                          {resource.name} ({resource.type})
+                        </span>
                       </label>
                     ))}
-                  {tasks.filter((t) => !editingTask || t.id !== editingTask.id).length === 0 && (
-                    <p className="hint-text">No other tasks available for dependencies.</p>
-                  )}
+                    {resources.length === 0 && (
+                      <p className="hint-text">No resources available. Create resources first.</p>
+                    )}
+                  </div>
                 </div>
-              </div>
-              <div className="form-group">
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={taskFormData.milestone}
-                    onChange={(e) => setTaskFormData({ ...taskFormData, milestone: e.target.checked })}
-                  />
-                  Mark as Milestone
-                </label>
-              </div>
-              <div className="modal-actions">
-                <button type="button" onClick={() => setShowTaskModal(false)}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn-primary">
-                  {editingTask ? 'Update' : 'Create'}
-                </button>
-              </div>
-            </form>
+                <div className="form-group">
+                  <label>Dependencies (Tasks this depends on)</label>
+                  <div className="dependency-checkboxes">
+                    {tasks
+                      .filter((t) => !editingTask || t.id !== editingTask.id)
+                      .map((task) => (
+                        <label key={task.id} className="dependency-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={taskFormData.dependencies.includes(task.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setTaskFormData({
+                                  ...taskFormData,
+                                  dependencies: [...taskFormData.dependencies, task.id],
+                                });
+                              } else {
+                                setTaskFormData({
+                                  ...taskFormData,
+                                  dependencies: taskFormData.dependencies.filter((id) => id !== task.id),
+                                });
+                              }
+                            }}
+                          />
+                          <span>{task.title}</span>
+                        </label>
+                      ))}
+                    {tasks.filter((t) => !editingTask || t.id !== editingTask.id).length === 0 && (
+                      <p className="hint-text">No other tasks available for dependencies.</p>
+                    )}
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={taskFormData.milestone}
+                      onChange={(e) => setTaskFormData({ ...taskFormData, milestone: e.target.checked })}
+                    />
+                    Mark as Milestone
+                  </label>
+                </div>
+                <div className="modal-actions">
+                  <button 
+                    type="button" 
+                    onClick={() => {
+                      delete (window as any).__taskEditValidation;
+                      setShowTaskModal(false);
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    type="submit" 
+                    className="btn-primary"
+                  >
+                    {editingTask ? 'Update' : 'Create'}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        )}
     </div>
   );
 };
