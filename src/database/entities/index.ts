@@ -8,5 +8,11 @@ export { PurchaseEntity } from './Purchase';
 export { DepartmentEntity } from './Department';
 export { ConfigurationEntity } from './Configuration';
 export { TaskInvitationEntity } from './TaskInvitation';
+export { ProcurementDocumentEntity } from './ProcurementDocument';
+export { RequisitionDocumentEntity } from './RequisitionDocument';
+export { ProjectOwnershipTransferEntity } from './ProjectOwnershipTransfer';
+export { ProjectOwnershipInvitationEntity } from './ProjectOwnershipInvitation';
+export { OrderOwnershipTransferEntity } from './OrderOwnershipTransfer';
+export { OrderOwnershipInvitationEntity } from './OrderOwnershipInvitation';
 
 

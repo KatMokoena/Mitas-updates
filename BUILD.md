@@ -94,3 +94,5 @@ The application includes an auto-update system using `electron-updater`. Configu
 
 
 
+
+

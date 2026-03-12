@@ -192,7 +192,6 @@ const ProjectDetail: React.FC = () => {
       status: TaskStatus.NOT_STARTED,
       startDate: new Date().toISOString().split('T')[0],
       endDate: new Date(Date.now() + 86400000).toISOString().split('T')[0],
-      estimatedDays: 1,
       assignedUserId: '',
       resourceIds: [],
       dependencies: [],
@@ -213,7 +212,6 @@ const ProjectDetail: React.FC = () => {
       status: task.status,
       startDate: task.startDate.split('T')[0],
       endDate: task.endDate.split('T')[0],
-      estimatedDays: task.estimatedDays,
       assignedUserId: task.assignedUserId || '',
       resourceIds: task.resourceIds || [],
       dependencies: task.dependencies,
@@ -294,11 +292,17 @@ const ProjectDetail: React.FC = () => {
         ? `${API_BASE_URL}/api/tasks/${editingTask.id}`
         : `${API_BASE_URL}/api/tasks`;
 
+      // Calculate estimatedDays from dates for database compatibility
+      const startDate = new Date(taskFormData.startDate);
+      const endDate = new Date(taskFormData.endDate);
+      const estimatedDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+      
       const taskData = {
         ...taskFormData,
         projectId: id,
-        startDate: new Date(taskFormData.startDate).toISOString(),
-        endDate: new Date(taskFormData.endDate).toISOString(),
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+        estimatedDays: estimatedDays,
       };
 
       const response = await fetch(url, {
@@ -557,19 +561,6 @@ const ProjectDetail: React.FC = () => {
                   </div>
                 </div>
                 <div className="form-row">
-                  <div className="form-group">
-                    <label>Estimated Days</label>
-                    <input
-                      type="number"
-                      value={taskFormData.estimatedDays}
-                      onChange={(e) =>
-                        setTaskFormData({ ...taskFormData, estimatedDays: parseInt(e.target.value) })
-                      }
-                      min="1"
-                      required
-                      disabled={isLocked}
-                    />
-                  </div>
                 <div className="form-group">
                   <label>Status</label>
                   <select

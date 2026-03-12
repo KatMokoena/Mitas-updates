@@ -1,0 +1,27 @@
+{
+  "github": {
+    "owner": "YOUR_GITHUB_USERNAME_OR_ORG",
+    "ownerType": "user",
+    "tokenEnv": "GITHUB_TOKEN"
+  },
+  "defaults": {
+    "branch": "main",
+    "visibility": "public",
+    "enablePages": true,
+    "commitMessage": "Automated update"
+  },
+  "projects": [
+    {
+      "name": "Project One",
+      "localPath": "C:/path/to/project-one",
+      "repo": "project-one",
+      "branch": "main",
+      "enablePages": true,
+      "commitMessage": "Update project one"
+    },
+    {
+      "name": "Project Two",
+      "localPath": "D:/another/path/project-two"
+    }
+  ]
+}

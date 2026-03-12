@@ -57,6 +57,8 @@
 
 .order-card-wrapper {
   position: relative;
+  display: flex;
+  flex-direction: column;
 }
 
 .order-card {
@@ -217,9 +219,6 @@
 }
 
 .order-delete-btn {
-  position: absolute;
-  bottom: var(--spacing-md);
-  right: var(--spacing-md);
   padding: 8px 16px;
   border-radius: var(--radius-pill);
   background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
@@ -233,14 +232,11 @@
   justify-content: center;
   box-shadow: 0 2px 8px rgba(220, 38, 38, 0.3);
   transition: all var(--transition-base);
-  z-index: 10;
-  opacity: 0;
-  transform: translateY(4px);
+  white-space: nowrap;
 }
 
 .order-card-wrapper:hover .order-delete-btn {
-  opacity: 1;
-  transform: translateY(0);
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
 }
 
 .order-delete-btn:hover {

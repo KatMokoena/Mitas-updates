@@ -1,6 +1,8 @@
 import { getDataSource } from '../database/config';
 import { RequisitionStatusHistoryEntity } from '../database/entities/RequisitionStatusHistory';
 import { RequisitionEntity, RequisitionStatus } from '../database/entities/Requisition';
+import { UserEntity } from '../database/entities/User';
+import { In } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 
 /**
@@ -46,23 +48,76 @@ export class RequisitionStatusHistoryService {
         rejectedByIds = rejectedByIdsValue.split(',').map((id: string) => id.trim()).filter((id: string) => id.length > 0);
       }
 
+      // Get user info for traceability
+      const userRepository = getDataSource().getRepository(UserEntity);
+      const requester = await userRepository.findOne({ where: { id: requisition.requestedBy } });
+      
+      // Get approver info
+      let approverInfoArray: any[] = [];
+      if (approverIds.length > 0) {
+        const approverUsers = await userRepository.find({ where: { id: In(approverIds) } });
+        approverInfoArray = approverUsers.map(u => ({
+          id: u.id,
+          name: u.name || null,
+          surname: u.surname || null,
+          email: u.email || null,
+        }));
+      }
+      
+      // Get approver/rejector info
+      let approvedByInfoArray: any[] = [];
+      if (approvedByIds.length > 0) {
+        const approvedByUsers = await userRepository.find({ where: { id: In(approvedByIds) } });
+        approvedByInfoArray = approvedByUsers.map(u => ({
+          id: u.id,
+          name: u.name || null,
+          surname: u.surname || null,
+          email: u.email || null,
+        }));
+      }
+      
+      let rejectedByInfoArray: any[] = [];
+      if (rejectedByIds.length > 0) {
+        const rejectedByUsers = await userRepository.find({ where: { id: In(rejectedByIds) } });
+        rejectedByInfoArray = rejectedByUsers.map(u => ({
+          id: u.id,
+          name: u.name || null,
+          surname: u.surname || null,
+          email: u.email || null,
+        }));
+      }
+      
+      // Get changedBy user info
+      let changedByUser: UserEntity | null = null;
+      if (changedBy) {
+        changedByUser = await userRepository.findOne({ where: { id: changedBy } });
+      }
+      
       // Create history record
       const historyRecord = historyRepository.create({
-        id: uuidv4(),
         requisitionId: requisition.id,
         orderId: requisition.orderId,
         requestedBy: requisition.requestedBy,
+        requestedByName: requester?.name || undefined,
+        requestedBySurname: requester?.surname || undefined,
+        requestedByEmail: requester?.email || undefined,
         approverIds: approverIds.length > 0 ? approverIds : undefined,
+        approverNames: approverInfoArray.length > 0 ? JSON.stringify(approverInfoArray) : undefined,
         approvedByIds: approvedByIds.length > 0 ? approvedByIds : undefined,
+        approvedByNames: approvedByInfoArray.length > 0 ? JSON.stringify(approvedByInfoArray) : undefined,
         rejectedByIds: rejectedByIds.length > 0 ? rejectedByIds : undefined,
+        rejectedByNames: rejectedByInfoArray.length > 0 ? JSON.stringify(rejectedByInfoArray) : undefined,
         status: requisition.status,
         previousStatus: previousStatus,
         changedBy: changedBy,
+        changedByName: changedByUser?.name || undefined,
+        changedBySurname: changedByUser?.surname || undefined,
+        changedByEmail: changedByUser?.email || undefined,
         rejectionReason: requisition.rejectionReason,
         notes: requisition.notes,
         description: description || this.generateStatusDescription(requisition.status, approvedByIds, approverIds, rejectedByIds),
       });
-
+      historyRecord.id = uuidv4();
       await historyRepository.save(historyRecord);
     } catch (error) {
       console.error('Failed to log requisition status change:', error);
@@ -166,6 +221,8 @@ export class RequisitionStatusHistoryService {
     }
   }
 }
+
+
 
 
 

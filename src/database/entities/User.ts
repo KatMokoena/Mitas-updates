@@ -27,6 +27,9 @@ export class UserEntity {
   @Column('uuid', { nullable: true })
   departmentId?: string;
 
+  @Column({ default: false })
+  needsPasswordChange!: boolean;
+
   @CreateDateColumn()
   createdAt!: Date;
 

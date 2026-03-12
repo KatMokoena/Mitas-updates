@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Fragment } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { API_BASE_URL } from '../config';
 import { TaskStatus, OrderStatus, OrderPriority } from '../../shared/types';
@@ -18,6 +18,7 @@ interface Order {
   equipmentIds?: string[] | string;
   createdBy?: string;
   departmentId?: string;
+  completedDate?: string;
 }
 
 interface Task {
@@ -76,7 +77,8 @@ const OrderTimelineEnhanced: React.FC = () => {
   const [taskFormData, setTaskFormData] = useState({
     title: '',
     description: '',
-    estimatedDays: 1,
+    startDate: '',
+    endDate: '',
     dependencies: [] as string[],
     assignedUserId: '' as string | undefined,
   });
@@ -93,7 +95,8 @@ const OrderTimelineEnhanced: React.FC = () => {
   const [editTaskFormData, setEditTaskFormData] = useState({
     title: '',
     description: '',
-    estimatedDays: 1,
+    startDate: '',
+    endDate: '',
     dependencies: [] as string[],
     status: TaskStatus.NOT_STARTED,
   });
@@ -105,6 +108,15 @@ const OrderTimelineEnhanced: React.FC = () => {
   const [canAddTask, setCanAddTask] = useState<boolean>(false);
   const [canAccessOrder, setCanAccessOrder] = useState<boolean>(true); // Default to true to prevent flash of restricted message
   const [projectId, setProjectId] = useState<string | null>(null);
+  const [analysis, setAnalysis] = useState<{
+    recommendations: string;
+    weaknesses: string;
+    faults: string;
+    mistakes: string;
+    summary?: string;
+  } | null>(null);
+  const [loadingAnalysis, setLoadingAnalysis] = useState(false);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
 
   useEffect(() => {
     if (id) {
@@ -116,6 +128,13 @@ const OrderTimelineEnhanced: React.FC = () => {
       fetchProjectId();
     }
   }, [id]);
+
+  // Fetch analysis when order is completed
+  useEffect(() => {
+    if (order && order.status === OrderStatus.COMPLETED) {
+      fetchAnalysis();
+    }
+  }, [order?.status, id]);
 
   const fetchProjectId = async () => {
     if (!id) return;
@@ -555,6 +574,15 @@ const OrderTimelineEnhanced: React.FC = () => {
       });
 
       if (response.ok) {
+        // Check if response is actually a blob (file) or an error JSON
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          // Server returned JSON error
+          const errorData = await response.json();
+          alert(`Failed to download document: ${errorData.error || 'Unknown error'}`);
+          return;
+        }
+
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -565,11 +593,20 @@ const OrderTimelineEnhanced: React.FC = () => {
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
       } else {
-        alert('Failed to download document');
+        // Try to get error message from response
+        let errorMessage = 'Failed to download document';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch (e) {
+          errorMessage = `Failed to download document (Status: ${response.status})`;
+        }
+        alert(errorMessage);
       }
     } catch (error) {
       console.error('Failed to download proof:', error);
-      alert('Failed to download document');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      alert(`Failed to download document: ${errorMessage}`);
     }
   };
 
@@ -651,6 +688,74 @@ const OrderTimelineEnhanced: React.FC = () => {
       }
     } catch (error) {
       console.error('Failed to fetch order owner:', error);
+    }
+  };
+
+  const fetchAnalysis = async () => {
+    if (!id) return;
+    setLoadingAnalysis(true);
+    setAnalysisError(null);
+    try {
+      const sessionId = localStorage.getItem('sessionId');
+      const response = await fetch(`${API_BASE_URL}/api/orders/${id}/analysis`, {
+        headers: { 'x-session-id': sessionId || '' },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setAnalysis({
+          recommendations: data.recommendations,
+          weaknesses: data.weaknesses,
+          faults: data.faults,
+          mistakes: data.mistakes,
+          summary: data.summary,
+        });
+      } else if (response.status === 404) {
+        // Analysis not found - this is normal if it hasn't been generated yet
+        setAnalysis(null);
+      } else {
+        const errorData = await response.json().catch(() => ({ error: 'Failed to fetch analysis' }));
+        setAnalysisError(errorData.error || 'Failed to fetch analysis');
+      }
+    } catch (error) {
+      console.error('Failed to fetch analysis:', error);
+      setAnalysisError('Failed to fetch analysis');
+    } finally {
+      setLoadingAnalysis(false);
+    }
+  };
+
+  const triggerAnalysis = async () => {
+    if (!id) return;
+    setLoadingAnalysis(true);
+    setAnalysisError(null);
+    try {
+      const sessionId = localStorage.getItem('sessionId');
+      const response = await fetch(`${API_BASE_URL}/api/orders/${id}/analyze`, {
+        method: 'POST',
+        headers: { 'x-session-id': sessionId || '' },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setAnalysis({
+          recommendations: data.recommendations,
+          weaknesses: data.weaknesses,
+          faults: data.faults,
+          mistakes: data.mistakes,
+          summary: data.summary,
+        });
+      } else {
+        const errorData = await response.json().catch(() => ({ error: 'Failed to generate analysis' }));
+        setAnalysisError(errorData.error || 'Failed to generate analysis');
+        alert(errorData.error || 'Failed to generate analysis');
+      }
+    } catch (error) {
+      console.error('Failed to trigger analysis:', error);
+      setAnalysisError('Failed to generate analysis');
+      alert('Failed to generate analysis');
+    } finally {
+      setLoadingAnalysis(false);
     }
   };
 
@@ -858,7 +963,8 @@ const OrderTimelineEnhanced: React.FC = () => {
     setEditTaskFormData({
       title: task.title,
       description: task.description,
-      estimatedDays: Math.ceil((new Date(task.endDate).getTime() - new Date(task.startDate).getTime()) / (1000 * 60 * 60 * 24)),
+      startDate: task.startDate.split('T')[0],
+      endDate: task.endDate.split('T')[0],
       dependencies: task.dependencies || [],
       status: task.status,
     });
@@ -901,9 +1007,22 @@ const OrderTimelineEnhanced: React.FC = () => {
         }
       }
 
-      const now = new Date();
-      const endDate = new Date(now);
-      endDate.setDate(endDate.getDate() + editTaskFormData.estimatedDays);
+      // Validate dates
+      if (!editTaskFormData.startDate || !editTaskFormData.endDate) {
+        alert('Please select both start and end dates');
+        return;
+      }
+      
+      const startDate = new Date(editTaskFormData.startDate);
+      const endDate = new Date(editTaskFormData.endDate);
+      
+      if (endDate < startDate) {
+        alert('End date must be after start date');
+        return;
+      }
+      
+      // Calculate estimatedDays from dates for database compatibility
+      const estimatedDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
 
       const response = await fetch(`${API_BASE_URL}/api/tasks/${editingTaskId}`, {
         method: 'PUT',
@@ -914,10 +1033,10 @@ const OrderTimelineEnhanced: React.FC = () => {
         body: JSON.stringify({
           title: editTaskFormData.title,
           description: editTaskFormData.description,
-          estimatedDays: editTaskFormData.estimatedDays,
+          estimatedDays: estimatedDays,
           dependencies: editTaskFormData.dependencies,
           status: editTaskFormData.status,
-          startDate: task.startDate,
+          startDate: startDate.toISOString(),
           endDate: endDate.toISOString(),
         }),
       });
@@ -1416,9 +1535,23 @@ const OrderTimelineEnhanced: React.FC = () => {
   const handleAddTask = async () => {
     try {
       const sessionId = localStorage.getItem('sessionId');
-      const now = new Date();
-      const endDate = new Date(now);
-      endDate.setDate(endDate.getDate() + taskFormData.estimatedDays);
+      
+      // Validate dates
+      if (!taskFormData.startDate || !taskFormData.endDate) {
+        alert('Please select both start and end dates');
+        return;
+      }
+      
+      const startDate = new Date(taskFormData.startDate);
+      const endDate = new Date(taskFormData.endDate);
+      
+      if (endDate < startDate) {
+        alert('End date must be after start date');
+        return;
+      }
+      
+      // Calculate estimatedDays from dates for database compatibility
+      const estimatedDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
 
       // First, try to find or create a project for this order
       // Check if there's a project associated with this order
@@ -1477,9 +1610,9 @@ const OrderTimelineEnhanced: React.FC = () => {
           title: taskFormData.title,
           description: taskFormData.description,
           status: TaskStatus.NOT_STARTED,
-          startDate: now.toISOString(),
+          startDate: startDate.toISOString(),
           endDate: endDate.toISOString(),
-          estimatedDays: taskFormData.estimatedDays,
+          estimatedDays: estimatedDays,
           dependencies: taskFormData.dependencies,
           assignedUserId: taskFormData.assignedUserId || undefined,
           isCritical: false,
@@ -1489,7 +1622,16 @@ const OrderTimelineEnhanced: React.FC = () => {
 
       if (response.ok) {
         setIsAddingTask(false);
-        setTaskFormData({ title: '', description: '', estimatedDays: 1, dependencies: [], assignedUserId: '' });
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        setTaskFormData({ 
+          title: '', 
+          description: '', 
+          startDate: new Date().toISOString().split('T')[0],
+          endDate: tomorrow.toISOString().split('T')[0],
+          dependencies: [], 
+          assignedUserId: '' 
+        });
         // Recalculate timeline after adding task
         await handleRecalculate();
         await fetchTimeline();
@@ -1539,7 +1681,31 @@ const OrderTimelineEnhanced: React.FC = () => {
 
   const deadline = new Date(order.deadline);
   const projectedCompletion = new Date(timeline.projectedCompletionDate);
-  const isOverdue = deadline < new Date() && order.status !== OrderStatus.COMPLETED;
+  const now = new Date();
+  const isOverdue = deadline < now && order.status !== OrderStatus.COMPLETED;
+  const isCompleted = order.status === OrderStatus.COMPLETED;
+  const completedDate = order.completedDate ? new Date(order.completedDate) : null;
+  
+  // Calculate days display
+  let daysDisplay = '';
+  let daysLabel = 'Days Until Deadline:';
+  if (isCompleted && completedDate) {
+    const daysBeforeDeadline = Math.ceil((deadline.getTime() - completedDate.getTime()) / (1000 * 60 * 60 * 24));
+    if (daysBeforeDeadline > 0) {
+      daysDisplay = `Completed ${daysBeforeDeadline} days before deadline`;
+      daysLabel = 'Completion Status:';
+    } else if (daysBeforeDeadline === 0) {
+      daysDisplay = 'Completed on deadline';
+      daysLabel = 'Completion Status:';
+    } else {
+      daysDisplay = `Completed ${Math.abs(daysBeforeDeadline)} days after deadline`;
+      daysLabel = 'Completion Status:';
+    }
+  } else {
+    // For active projects, don't show negative days - stop at 0 when deadline is reached
+    const daysUntil = Math.max(0, timeline.daysUntilDeadline);
+    daysDisplay = `${daysUntil} days`;
+  }
 
   const filteredTasks = 
     selectedView === 'critical'
@@ -1547,6 +1713,36 @@ const OrderTimelineEnhanced: React.FC = () => {
       : selectedView === 'timeline'
       ? (timeline.tasks || []).filter((t) => t.status !== TaskStatus.COMPLETED)
       : (timeline.tasks || []);
+
+  // Prepare equipment items for requisition form if needed
+  let requisitionEquipmentItems: { id: string; name: string; category: 'technology' | 'solution'; quantity: number }[] = [];
+  if (showRequisitionForm && order) {
+    let equipmentIds: string[] = [];
+    if (order.equipmentIds) {
+      if (Array.isArray(order.equipmentIds)) {
+        equipmentIds = order.equipmentIds;
+      } else if (typeof order.equipmentIds === 'string' && (order.equipmentIds as string).trim()) {
+        equipmentIds = (order.equipmentIds as string).split(',').filter((id: string) => id.trim());
+      }
+    }
+    
+    requisitionEquipmentItems = equipmentIds
+      .map(id => {
+        const eq = equipment.find(e => e.id === id.trim());
+        if (eq) {
+          return {
+            id: eq.id,
+            name: eq.name,
+            category: (eq.category || 'technology') as 'technology' | 'solution',
+            quantity: 1, // Default quantity
+          };
+        }
+        return null;
+      })
+      .filter((item): item is { id: string; name: string; category: 'technology' | 'solution'; quantity: number } => item !== null);
+  }
+  
+  const shouldShowRequisitionForm = showRequisitionForm && order !== null && requisitionEquipmentItems.length > 0;
 
   // All users can access all projects - no restrictions
 
@@ -1583,18 +1779,22 @@ const OrderTimelineEnhanced: React.FC = () => {
                   </button>
                 )}
                 <button 
-                  onClick={() => setIsAddingTask(true)} 
+                  onClick={() => {
+                    const today = new Date();
+                    const tomorrow = new Date();
+                    tomorrow.setDate(tomorrow.getDate() + 1);
+                    setTaskFormData({ 
+                      title: '', 
+                      description: '', 
+                      startDate: today.toISOString().split('T')[0],
+                      endDate: tomorrow.toISOString().split('T')[0],
+                      dependencies: [], 
+                      assignedUserId: '' 
+                    });
+                    setIsAddingTask(true);
+                  }} 
                   className="btn-secondary"
-                  disabled={requisitionApproved === false || (requisitionApproved === true && !taskAssignmentEnabled && currentRequisition)}
-                  title={
-                    requisitionApproved === false && !currentRequisition
-                      ? 'Create and get a requisition approved before creating tasks'
-                      : requisitionApproved === false && currentRequisition
-                      ? 'Requisition must be approved before creating tasks'
-                      : (requisitionApproved === true && !taskAssignmentEnabled && currentRequisition)
-                      ? 'Please enable task assignment first'
-                      : 'Add Task'
-                  }
+                  title="Add Task"
                 >
                   Add Task
                 </button>
@@ -1675,224 +1875,274 @@ const OrderTimelineEnhanced: React.FC = () => {
             </span>
           </div>
           <div className="status-item">
-            <span className="status-label">Days Until Deadline:</span>
-            <span className={isOverdue ? 'overdue-large' : 'days-large'}>
-              {timeline.daysUntilDeadline > 0
-                ? `${timeline.daysUntilDeadline} days`
-                : `${Math.abs(timeline.daysUntilDeadline)} days overdue`}
+            <span className="status-label">{daysLabel}</span>
+            <span className={isOverdue ? 'overdue-large' : isCompleted ? 'completed-large' : 'days-large'}>
+              {daysDisplay}
             </span>
           </div>
         </div>
         <div className="dates-section">
           <div className="date-item">
-            <strong>Target Deadline:</strong>
-            <span className={isOverdue ? 'overdue' : ''}>
-              {deadline.toLocaleDateString()} {deadline.toLocaleTimeString()}
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <strong>Target Deadline:</strong>
+              <span className={isOverdue ? 'overdue' : ''}>
+                {deadline.toLocaleDateString()} {deadline.toLocaleTimeString()}
+              </span>
+            </div>
           </div>
           <div className="date-item">
-            <strong>Projected Completion:</strong>
-            <span
-              className={
-                projectedCompletion > deadline ? 'late-projection' : 'on-time-projection'
-              }
-            >
-              {projectedCompletion.toLocaleDateString()}{' '}
-              {projectedCompletion.toLocaleTimeString()}
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '8px' }}>
+              <strong>Projected Completion:</strong>
+              <span
+                className={
+                  projectedCompletion > deadline ? 'late-projection' : 'on-time-projection'
+                }
+              >
+                {projectedCompletion.toLocaleDateString()}{' '}
+                {projectedCompletion.toLocaleTimeString()}
+              </span>
+            </div>
+            {!isCompleted && canAccessOrder && (canEditOrders || user?.role === 'ADMIN' || user?.role === 'admin' || user?.role === 'PROJECT_MANAGER' || user?.role === 'project_manager') && (
+              <button
+                onClick={async () => {
+                  if (confirm('Mark this project as complete?')) {
+                    try {
+                      const sessionId = localStorage.getItem('sessionId');
+                      const response = await fetch(`${API_BASE_URL}/api/orders/${id}`, {
+                        method: 'PUT',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'x-session-id': sessionId || '',
+                        },
+                        body: JSON.stringify({
+                          ...order,
+                          status: OrderStatus.COMPLETED,
+                        }),
+                      });
+                      
+                      if (response.ok) {
+                        await fetchOrder();
+                        await fetchTimeline();
+                      } else {
+                        const data = await response.json();
+                        alert(data.error || 'Failed to mark project as complete');
+                      }
+                    } catch (error) {
+                      console.error('Failed to mark project as complete:', error);
+                      alert('Failed to mark project as complete');
+                    }
+                  }
+                }}
+                className="project-completed-button"
+                title="Mark this project as complete"
+              >
+                Mark Project Complete
+              </button>
+            )}
           </div>
         </div>
-        <div className="equipment-section">
-          <strong className="equipment-section-title">Required Solution & Equipment:</strong>
-          {(() => {
-            // Normalize equipmentIds - handle both array and string (from simple-array)
-            let equipmentIds: string[] = [];
-            if (order?.equipmentIds) {
-              if (Array.isArray(order.equipmentIds)) {
-                equipmentIds = order.equipmentIds;
-              } else if (typeof order.equipmentIds === 'string' && order.equipmentIds.trim()) {
-                equipmentIds = order.equipmentIds.split(',').filter((id: string) => id.trim());
-              }
+      </div>
+
+      {/* AI Analysis Section - Only show for completed projects */}
+      {isCompleted && (
+        <div className="ai-analysis-section">
+          <div className="analysis-header">
+            <h2>📊 Project Analysis</h2>
+            <div className="analysis-actions">
+              {!analysis && !loadingAnalysis && (
+                <button onClick={triggerAnalysis} className="btn-secondary" disabled={loadingAnalysis}>
+                  {loadingAnalysis ? 'Generating...' : 'Generate Analysis'}
+                </button>
+              )}
+              {analysis && (
+                <button onClick={fetchAnalysis} className="btn-secondary" disabled={loadingAnalysis}>
+                  {loadingAnalysis ? 'Refreshing...' : 'Refresh'}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {loadingAnalysis && !analysis && (
+            <div className="analysis-loading">
+              <p>Generating project analysis...</p>
+            </div>
+          )}
+
+          {analysisError && (
+            <div className="analysis-error">
+              <p>⚠️ {analysisError}</p>
+            </div>
+          )}
+
+          {analysis && (
+            <div className="analysis-content">
+              {analysis.summary && (
+                <div className="analysis-summary">
+                  <h3>Summary</h3>
+                  <p>{analysis.summary}</p>
+                </div>
+              )}
+
+              <div className="analysis-grid">
+                <div className="analysis-card recommendations">
+                  <div className="analysis-card-header">
+                    <h3>💡 Recommendations for Future Projects</h3>
+                  </div>
+                  <div className="analysis-card-content">
+                    <div style={{ whiteSpace: 'pre-wrap' }}>{analysis.recommendations}</div>
+                  </div>
+                </div>
+
+                <div className="analysis-card weaknesses">
+                  <div className="analysis-card-header">
+                    <h3>⚠️ Weaknesses</h3>
+                  </div>
+                  <div className="analysis-card-content">
+                    <div style={{ whiteSpace: 'pre-wrap' }}>{analysis.weaknesses}</div>
+                  </div>
+                </div>
+
+                <div className="analysis-card faults">
+                  <div className="analysis-card-header">
+                    <h3>🔴 Faults</h3>
+                  </div>
+                  <div className="analysis-card-content">
+                    <div style={{ whiteSpace: 'pre-wrap' }}>{analysis.faults}</div>
+                  </div>
+                </div>
+
+                <div className="analysis-card mistakes">
+                  <div className="analysis-card-header">
+                    <h3>❌ Mistakes</h3>
+                  </div>
+                  <div className="analysis-card-content">
+                    <div style={{ whiteSpace: 'pre-wrap' }}>{analysis.mistakes}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {!analysis && !loadingAnalysis && !analysisError && (
+            <div className="analysis-placeholder">
+              <p>Project analysis will be generated automatically when the project is marked as complete.</p>
+              <p style={{ fontSize: '12px', color: '#64748b', marginTop: '8px' }}>
+                Click "Generate Analysis" to create it now, or wait for automatic generation.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="equipment-section">
+        <strong className="equipment-section-title">Required Solution & Equipment:</strong>
+        {(() => {
+          // Normalize equipmentIds - handle both array and string (from simple-array)
+          let equipmentIds: string[] = [];
+          if (order?.equipmentIds) {
+            if (Array.isArray(order.equipmentIds)) {
+              equipmentIds = order.equipmentIds;
+            } else if (typeof order.equipmentIds === 'string' && order.equipmentIds.trim()) {
+              equipmentIds = order.equipmentIds.split(',').filter((id: string) => id.trim());
             }
-            
-            if (equipmentIds.length === 0) {
-              return <div className="no-equipment">No equipment specified</div>;
+          }
+          
+          if (equipmentIds.length === 0) {
+            return <div className="no-equipment">No equipment specified</div>;
+          }
+          
+          // Group equipment by category
+          const solutions = equipmentIds
+            .map(id => equipment.find(e => e.id === id.trim()))
+            .filter((eq): eq is { id: string; name: string; category?: string } => 
+              eq !== undefined && eq.category === 'solution'
+            );
+          
+          const technologies = equipmentIds
+            .map(id => equipment.find(e => e.id === id.trim()))
+            .filter((eq): eq is { id: string; name: string; category?: string } => 
+              eq !== undefined && eq.category === 'technology'
+            );
+          
+          return (
+            <div className="equipment-columns">
+              {solutions.length > 0 && (
+                <div className="equipment-column">
+                  <div className="equipment-column-header">Solution</div>
+                  <ul className="equipment-items">
+                    {solutions.map((eq) => (
+                      <li key={eq.id}>{eq.name}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {technologies.length > 0 && (
+                <div className="equipment-column">
+                  <div className="equipment-column-header">Technology</div>
+                  <ul className="equipment-items">
+                    {technologies.map((eq) => (
+                      <li key={eq.id}>{eq.name}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+        {(() => {
+          // Normalize equipmentIds - handle both array and string (from simple-array)
+          let equipmentIds: string[] = [];
+          if (order?.equipmentIds) {
+            if (Array.isArray(order.equipmentIds)) {
+              equipmentIds = order.equipmentIds;
+            } else if (typeof order.equipmentIds === 'string' && order.equipmentIds.trim()) {
+              equipmentIds = order.equipmentIds.split(',').filter((id: string) => id.trim());
             }
+          }
+          
+          if (equipmentIds.length > 0) {
+            const equipmentItems = equipmentIds
+              .map(id => {
+                const eq = equipment.find(e => e.id === id.trim());
+                if (eq) {
+                  // Try to get quantity from order if stored, otherwise default to 1
+                  return {
+                    id: eq.id,
+                    name: eq.name,
+                    category: eq.category || 'technology',
+                    quantity: 1, // Default quantity, can be enhanced later
+                  };
+                }
+                return null;
+              })
+              .filter((item): item is { id: string; name: string; category: 'technology' | 'solution'; quantity: number } => item !== null);
             
-            // Group equipment by category
-            const solutions = equipmentIds
-              .map(id => equipment.find(e => e.id === id.trim()))
-              .filter((eq): eq is { id: string; name: string; category?: string } => 
-                eq !== undefined && eq.category === 'solution'
-              );
-            
-            const technologies = equipmentIds
-              .map(id => equipment.find(e => e.id === id.trim()))
-              .filter((eq): eq is { id: string; name: string; category?: string } => 
-                eq !== undefined && eq.category === 'technology'
-              );
+            // Check if there's a requisition and show status
+            const hasRequisition = currentRequisition !== null;
+            const requisitionStatus = currentRequisition?.status;
             
             return (
-              <div className="equipment-columns">
-                {solutions.length > 0 && (
-                  <div className="equipment-column">
-                    <div className="equipment-column-header">Solution</div>
-                    <ul className="equipment-items">
-                      {solutions.map((eq) => (
-                        <li key={eq.id}>{eq.name}</li>
-                      ))}
-                    </ul>
+              <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <button
+                  onClick={() => setShowRequisitionForm(true)}
+                  className="btn-procurement"
+                >
+                  Get Requisition to begin project
+                </button>
+                {hasRequisition && requisitionStatus === 'pending_approval' && requisitionRejectors.length === 0 && (
+                  <div style={{ 
+                    padding: '8px 12px', 
+                    background: 'rgba(251, 191, 36, 0.15)', 
+                    border: '1px solid rgba(251, 191, 36, 0.3)',
+                    borderRadius: '6px',
+                    color: '#fbbf24',
+                    fontSize: '0.875rem'
+                  }}>
+                    Waiting for {requisitionPendingApprovers.map(a => `${a.name} ${a.surname}`).join('/')} to approve of technology and/or solution
                   </div>
                 )}
-                {technologies.length > 0 && (
-                  <div className="equipment-column">
-                    <div className="equipment-column-header">Technology</div>
-                    <ul className="equipment-items">
-                      {technologies.map((eq) => (
-                        <li key={eq.id}>{eq.name}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            );
-          })()}
-          {(() => {
-            // Normalize equipmentIds - handle both array and string (from simple-array)
-            let equipmentIds: string[] = [];
-            if (order?.equipmentIds) {
-              if (Array.isArray(order.equipmentIds)) {
-                equipmentIds = order.equipmentIds;
-              } else if (typeof order.equipmentIds === 'string' && order.equipmentIds.trim()) {
-                equipmentIds = order.equipmentIds.split(',').filter((id: string) => id.trim());
-              }
-            }
-            
-            if (equipmentIds.length > 0) {
-              const equipmentItems = equipmentIds
-                .map(id => {
-                  const eq = equipment.find(e => e.id === id.trim());
-                  if (eq) {
-                    // Try to get quantity from order if stored, otherwise default to 1
-                    return {
-                      id: eq.id,
-                      name: eq.name,
-                      category: eq.category || 'technology',
-                      quantity: 1, // Default quantity, can be enhanced later
-                    };
-                  }
-                  return null;
-                })
-                .filter((item): item is { id: string; name: string; category: 'technology' | 'solution'; quantity: number } => item !== null);
-              
-              // Check if there's a requisition and show status
-              const hasRequisition = currentRequisition !== null;
-              const requisitionStatus = currentRequisition?.status;
-              
-              return (
-                <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <button
-                    onClick={() => setShowRequisitionForm(true)}
-                    className="btn-procurement"
-                  >
-                    Get Requisition to begin project
-                  </button>
-                  {hasRequisition && requisitionStatus === 'pending_approval' && requisitionRejectors.length === 0 && (
-                    <div style={{ 
-                      padding: '8px 12px', 
-                      background: 'rgba(251, 191, 36, 0.15)', 
-                      border: '1px solid rgba(251, 191, 36, 0.3)',
-                      borderRadius: '6px',
-                      color: '#fbbf24',
-                      fontSize: '0.875rem'
-                    }}>
-                      Waiting for {requisitionPendingApprovers.map(a => `${a.name} ${a.surname}`).join('/')} to approve of technology and/or solution
-                    </div>
-                  )}
-                  {hasRequisition && requisitionStatus === 'pending_approval' && requisitionRejectors.length > 0 && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      <div style={{ 
-                        padding: '8px 12px', 
-                        background: 'rgba(239, 68, 68, 0.15)', 
-                        border: '1px solid rgba(239, 68, 68, 0.3)',
-                        borderRadius: '6px',
-                        color: '#ef4444',
-                        fontSize: '0.875rem'
-                      }}>
-                        Rejection from {requisitionRejectors.map(a => `${a.name} ${a.surname}`).join('/')} has been given for this requisition
-                      </div>
-                      {requisitionPendingApprovers.length > 0 && (
-                        <div style={{ 
-                          padding: '8px 12px', 
-                          background: 'rgba(251, 191, 36, 0.15)', 
-                          border: '1px solid rgba(251, 191, 36, 0.3)',
-                          borderRadius: '6px',
-                          color: '#fbbf24',
-                          fontSize: '0.875rem'
-                        }}>
-                          A second approval has been sent to {requisitionPendingApprovers.map(a => `${a.name} ${a.surname}`).join('/')} because {requisitionRejectors.map(a => `${a.name} ${a.surname}`).join('/')} rejected
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  {hasRequisition && requisitionStatus === 'approved' && (
-                    <div style={{ 
-                      padding: '12px', 
-                      background: 'rgba(34, 197, 94, 0.15)', 
-                      border: '1px solid rgba(34, 197, 94, 0.3)',
-                      borderRadius: '6px',
-                      color: '#22c55e',
-                      fontSize: '0.875rem'
-                    }}>
-                      <div style={{ marginBottom: requisitionProofs.length > 0 ? '8px' : '0' }}>
-                        Approval from {requisitionApprovers.map(a => `${a.name} ${a.surname}`).join('/')} has been given for this requisition
-                      </div>
-                      {requisitionProofs.length > 0 && (
-                        <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid rgba(34, 197, 94, 0.2)' }}>
-                          <div style={{ fontSize: '0.75rem', color: '#86efac', marginBottom: '6px', fontWeight: 600 }}>
-                            Proof Documents ({requisitionProofs.length}):
-                          </div>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            {requisitionProofs.map((proof) => (
-                              <div 
-                                key={proof.id}
-                                style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '8px',
-                                  padding: '4px 8px',
-                                  background: 'rgba(34, 197, 94, 0.1)',
-                                  borderRadius: '4px',
-                                  cursor: 'pointer',
-                                  transition: 'background 0.2s',
-                                }}
-                                onClick={() => handleDownloadProof(proof.id, proof.fileName)}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.background = 'rgba(34, 197, 94, 0.2)';
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.background = 'rgba(34, 197, 94, 0.1)';
-                                }}
-                                title={`Click to download: ${proof.fileName}`}
-                              >
-                                <span style={{ fontSize: '1rem' }}>📎</span>
-                                <span style={{ flex: 1, fontSize: '0.75rem' }}>{proof.fileName}</span>
-                                {proof.description && (
-                                  <span style={{ fontSize: '0.7rem', color: '#86efac', fontStyle: 'italic' }}>
-                                    {proof.description}
-                                  </span>
-                                )}
-                                <span style={{ fontSize: '0.7rem', color: '#86efac' }}>
-                                  by {proof.uploadedByName}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  {hasRequisition && requisitionStatus === 'rejected' && (
+                {hasRequisition && requisitionStatus === 'pending_approval' && requisitionRejectors.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     <div style={{ 
                       padding: '8px 12px', 
                       background: 'rgba(239, 68, 68, 0.15)', 
@@ -1901,57 +2151,110 @@ const OrderTimelineEnhanced: React.FC = () => {
                       color: '#ef4444',
                       fontSize: '0.875rem'
                     }}>
-                      {requisitionRejectors.length > 0 
-                        ? `Rejection from ${requisitionRejectors.map(a => `${a.name} ${a.surname}`).join('/')} has been given for this requisition`
-                        : 'Rejection has been given for this requisition'}
+                      Rejection from {requisitionRejectors.map(a => `${a.name} ${a.surname}`).join('/')} has been given for this requisition
                     </div>
-                  )}
-                </div>
-              );
-            }
-            return null;
-          })()}
-        </div>
+                    {requisitionPendingApprovers.length > 0 && (
+                      <div style={{ 
+                        padding: '8px 12px', 
+                        background: 'rgba(251, 191, 36, 0.15)', 
+                        border: '1px solid rgba(251, 191, 36, 0.3)',
+                        borderRadius: '6px',
+                        color: '#fbbf24',
+                        fontSize: '0.875rem'
+                      }}>
+                        A second approval has been sent to {requisitionPendingApprovers.map(a => `${a.name} ${a.surname}`).join('/')} because {requisitionRejectors.map(a => `${a.name} ${a.surname}`).join('/')} rejected
+                      </div>
+                    )}
+                  </div>
+                )}
+                {hasRequisition && requisitionStatus === 'approved' && (
+                  <div style={{ 
+                    padding: '12px', 
+                    background: 'rgba(34, 197, 94, 0.15)', 
+                    border: '1px solid rgba(34, 197, 94, 0.3)',
+                    borderRadius: '6px',
+                    color: '#22c55e',
+                    fontSize: '0.875rem'
+                  }}>
+                    <div style={{ marginBottom: requisitionProofs.length > 0 ? '8px' : '0' }}>
+                      Approval from {requisitionApprovers.map(a => `${a.name} ${a.surname}`).join('/')} has been given for this requisition
+                    </div>
+                    {requisitionProofs.length > 0 && (
+                      <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid rgba(34, 197, 94, 0.2)' }}>
+                        <div style={{ fontSize: '0.75rem', color: '#86efac', marginBottom: '6px', fontWeight: 600 }}>
+                          Proof Documents ({requisitionProofs.length}):
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          {requisitionProofs.map((proof) => (
+                            <div 
+                              key={proof.id}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                padding: '4px 8px',
+                                background: 'rgba(34, 197, 94, 0.1)',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                transition: 'background 0.2s',
+                              }}
+                              onClick={() => handleDownloadProof(proof.id, proof.fileName)}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.background = 'rgba(34, 197, 94, 0.2)';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.background = 'rgba(34, 197, 94, 0.1)';
+                              }}
+                              title={`Click to download: ${proof.fileName}`}
+                            >
+                              <span style={{ fontSize: '1rem' }}>📎</span>
+                              <span style={{ flex: 1, fontSize: '0.75rem' }}>{proof.fileName}</span>
+                              {proof.description && (
+                                <span style={{ fontSize: '0.7rem', color: '#86efac', fontStyle: 'italic' }}>
+                                  {proof.description}
+                                </span>
+                              )}
+                              <span style={{ fontSize: '0.7rem', color: '#86efac' }}>
+                                by {proof.uploadedByName}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {hasRequisition && requisitionStatus === 'rejected' && (
+                  <div style={{ 
+                    padding: '8px 12px', 
+                    background: 'rgba(239, 68, 68, 0.15)', 
+                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                    borderRadius: '6px',
+                    color: '#ef4444',
+                    fontSize: '0.875rem'
+                  }}>
+                    {requisitionRejectors.length > 0 
+                      ? `Rejection from ${requisitionRejectors.map(a => `${a.name} ${a.surname}`).join('/')} has been given for this requisition`
+                      : 'Rejection has been given for this requisition'}
+                  </div>
+                )}
+              </div>
+            );
+          }
+          return null;
+        })()}
       </div>
 
-      {showRequisitionForm && order && (() => {
-        // Get equipment items with quantities
-        let equipmentIds: string[] = [];
-        if (order.equipmentIds) {
-          if (Array.isArray(order.equipmentIds)) {
-            equipmentIds = order.equipmentIds;
-          } else if (typeof order.equipmentIds === 'string' && (order.equipmentIds as string).trim()) {
-            equipmentIds = (order.equipmentIds as string).split(',').filter((id: string) => id.trim());
-          }
-        }
-        
-        const equipmentItems = equipmentIds
-          .map(id => {
-            const eq = equipment.find(e => e.id === id.trim());
-            if (eq) {
-              return {
-                id: eq.id,
-                name: eq.name,
-                category: (eq.category || 'technology') as 'technology' | 'solution',
-                quantity: 1, // Default quantity
-              };
-            }
-            return null;
-          })
-          .filter((item): item is { id: string; name: string; category: 'technology' | 'solution'; quantity: number } => item !== null);
-        
-        return (
-          <RequisitionForm
-            orderId={order.id}
-            equipmentItems={equipmentItems}
-            onClose={() => setShowRequisitionForm(false)}
-            onSuccess={() => {
-              setShowRequisitionForm(false);
-              // Optionally refresh data
-            }}
-          />
-        );
-      })()}
+      {shouldShowRequisitionForm ? (
+        <RequisitionForm
+          orderId={order!.id}
+          equipmentItems={requisitionEquipmentItems}
+          onClose={() => setShowRequisitionForm(false)}
+          onSuccess={() => {
+            setShowRequisitionForm(false);
+          }}
+        />
+      ) : null}
 
       <div className="view-selector">
         <button
@@ -2373,13 +2676,22 @@ const OrderTimelineEnhanced: React.FC = () => {
               />
             </div>
             <div className="form-group">
-              <label>Estimated Days *</label>
+              <label>Start Date *</label>
               <input
-                type="number"
-                min="1"
-                value={taskFormData.estimatedDays}
-                onChange={(e) => setTaskFormData({ ...taskFormData, estimatedDays: parseInt(e.target.value) || 1 })}
+                type="date"
+                value={taskFormData.startDate}
+                onChange={(e) => setTaskFormData({ ...taskFormData, startDate: e.target.value })}
                 required
+              />
+            </div>
+            <div className="form-group">
+              <label>End Date *</label>
+              <input
+                type="date"
+                value={taskFormData.endDate}
+                onChange={(e) => setTaskFormData({ ...taskFormData, endDate: e.target.value })}
+                required
+                min={taskFormData.startDate}
               />
             </div>
             <div className="form-group">
@@ -2453,13 +2765,22 @@ const OrderTimelineEnhanced: React.FC = () => {
                 />
               </div>
               <div className="form-group">
-                <label>Estimated Days *</label>
+                <label>Start Date *</label>
                 <input
-                  type="number"
-                  min="1"
-                  value={editTaskFormData.estimatedDays}
-                  onChange={(e) => setEditTaskFormData({ ...editTaskFormData, estimatedDays: parseInt(e.target.value) || 1 })}
+                  type="date"
+                  value={editTaskFormData.startDate}
+                  onChange={(e) => setEditTaskFormData({ ...editTaskFormData, startDate: e.target.value })}
                   required
+                />
+              </div>
+              <div className="form-group">
+                <label>End Date *</label>
+                <input
+                  type="date"
+                  value={editTaskFormData.endDate}
+                  onChange={(e) => setEditTaskFormData({ ...editTaskFormData, endDate: e.target.value })}
+                  required
+                  min={editTaskFormData.startDate}
                 />
               </div>
               <div className="form-group">

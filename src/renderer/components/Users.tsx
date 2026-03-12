@@ -115,13 +115,27 @@ const Users: React.FC = () => {
 
     try {
       const sessionId = localStorage.getItem('sessionId');
+      // Only include password if it's provided (not empty)
+      const updateData: any = {
+        name: formData.name,
+        surname: formData.surname,
+        email: formData.email,
+        role: formData.role,
+        departmentId: formData.departmentId || null,
+      };
+      
+      // Only add password if it's not empty
+      if (formData.password && formData.password.trim() !== '') {
+        updateData.password = formData.password;
+      }
+      
       const response = await fetch(`${API_BASE_URL}/api/users/${editingUser.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'x-session-id': sessionId || '',
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(updateData),
       });
 
       if (response.ok) {
@@ -255,17 +269,16 @@ const Users: React.FC = () => {
                   required
                 />
               </div>
-              {!editingUser && (
-                <div className="form-group">
-                  <label>Password</label>
-                  <input
-                    type="password"
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    required={!editingUser}
-                  />
-                </div>
-              )}
+              <div className="form-group">
+                <label>Password {editingUser && <span style={{ fontSize: '0.85em', color: '#888', fontWeight: 'normal' }}>(leave blank to keep current password)</span>}</label>
+                <input
+                  type="password"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  required={!editingUser}
+                  placeholder={editingUser ? "Enter new password (optional)" : "Enter password"}
+                />
+              </div>
               <div className="form-group">
                 <label>Role</label>
                 <select

@@ -27,6 +27,15 @@ export class TimeEntryEntity {
   @Column('uuid')
   userId!: string; // User who logged the time
 
+  @Column({ nullable: true })
+  userName?: string; // Name of user who logged the time
+
+  @Column({ nullable: true })
+  userSurname?: string; // Surname of user who logged the time
+
+  @Column({ nullable: true })
+  userEmail?: string; // Email of user who logged the time
+
   @Column({
     type: 'text',
     default: TimeEntryType.MANUAL,
@@ -63,4 +72,6 @@ export class TimeEntryEntity {
   @UpdateDateColumn()
   updatedAt!: Date; // When the entry was last updated
 }
+
+
 

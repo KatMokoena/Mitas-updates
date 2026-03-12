@@ -11,6 +11,17 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotPasswordEmail, setForgotPasswordEmail] = useState('');
+  const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
+  const [forgotPasswordMessage, setForgotPasswordMessage] = useState('');
+  const [showPasswordChange, setShowPasswordChange] = useState(false);
+  const [loginData, setLoginData] = useState<{ sessionId: string; user: any } | null>(null);
+  const [tempPassword, setTempPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordChangeError, setPasswordChangeError] = useState('');
+  const [passwordChangeLoading, setPasswordChangeLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,7 +40,16 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       const data = await response.json();
 
       if (response.ok) {
-        onLogin(data.sessionId, data.user);
+        // Check if user needs to change password
+        if (data.needsPasswordChange) {
+          // Store login data and show password change modal
+          setLoginData({ sessionId: data.sessionId, user: data.user });
+          setShowPasswordChange(true);
+          setTempPassword(password); // Store the temporary password they just entered
+        } else {
+          // Normal login - proceed directly
+          onLogin(data.sessionId, data.user);
+        }
       } else {
         setError(data.error || 'Login failed');
       }
@@ -37,6 +57,88 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       setError('Failed to connect to server');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotPasswordMessage('');
+    setForgotPasswordLoading(true);
+
+    try {
+      const apiUrl = `${API_BASE_URL || ''}/api/auth/forgot-password`;
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: forgotPasswordEmail }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setForgotPasswordMessage('If an account exists with this email, a password reset email has been sent. Please check your inbox.');
+        setForgotPasswordEmail('');
+        setTimeout(() => {
+          setShowForgotPassword(false);
+          setForgotPasswordMessage('');
+        }, 3000);
+      } else {
+        setForgotPasswordMessage(data.error || 'Failed to send password reset email');
+      }
+    } catch (err) {
+      setForgotPasswordMessage('Failed to connect to server');
+    } finally {
+      setForgotPasswordLoading(false);
+    }
+  };
+
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordChangeError('');
+    
+    if (newPassword !== confirmPassword) {
+      setPasswordChangeError('New password and confirm password do not match');
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setPasswordChangeError('Password must be at least 6 characters long');
+      return;
+    }
+
+    setPasswordChangeLoading(true);
+
+    try {
+      const apiUrl = `${API_BASE_URL || ''}/api/auth/change-password`;
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email,
+          temporaryPassword: tempPassword,
+          newPassword: newPassword,
+          confirmPassword: confirmPassword,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Password changed successfully - complete login
+        if (loginData) {
+          onLogin(data.sessionId, data.user);
+        }
+        setShowPasswordChange(false);
+        setTempPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+      } else {
+        setPasswordChangeError(data.error || 'Failed to change password');
+      }
+    } catch (err) {
+      setPasswordChangeError('Failed to connect to server');
+    } finally {
+      setPasswordChangeLoading(false);
     }
   };
 
@@ -96,6 +198,23 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               <button type="submit" className="sign-in-button" disabled={loading}>
                 {loading ? 'Signing in...' : 'Sign In'}
               </button>
+              <div style={{ textAlign: 'center', marginTop: '15px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowForgotPassword(true)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#f97316',
+                    cursor: 'pointer',
+                    textDecoration: 'underline',
+                    fontSize: '14px',
+                    padding: 0,
+                  }}
+                >
+                  Forgot Password?
+                </button>
+              </div>
             </form>
             <div className="login-footer">
               <p>Mitas - Internal Project Management Platform</p>
@@ -126,6 +245,144 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           </div>
         </div>
       </div>
+
+      {/* Forgot Password Modal */}
+      {showForgotPassword && (
+        <div className="modal-overlay" onClick={() => setShowForgotPassword(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+            <h2 style={{ marginTop: 0 }}>Forgot Password</h2>
+            <p style={{ color: '#666', marginBottom: '20px' }}>
+              Enter your email address and we'll send you a temporary password to log in.
+            </p>
+            <form onSubmit={handleForgotPassword}>
+              <div className="form-group">
+                <label>Email Address</label>
+                <input
+                  type="email"
+                  value={forgotPasswordEmail}
+                  onChange={(e) => setForgotPasswordEmail(e.target.value)}
+                  required
+                  autoFocus
+                  placeholder="Enter your email"
+                />
+              </div>
+              {forgotPasswordMessage && (
+                <div
+                  className={forgotPasswordMessage.includes('sent') ? 'success-message' : 'error-message'}
+                  style={{
+                    marginBottom: '15px',
+                    padding: '10px',
+                    borderRadius: '5px',
+                    backgroundColor: forgotPasswordMessage.includes('sent') ? '#d4edda' : '#f8d7da',
+                    color: forgotPasswordMessage.includes('sent') ? '#155724' : '#721c24',
+                  }}
+                >
+                  {forgotPasswordMessage}
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowForgotPassword(false);
+                    setForgotPasswordEmail('');
+                    setForgotPasswordMessage('');
+                  }}
+                  style={{
+                    padding: '10px 20px',
+                    background: '#6c757d',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '5px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="sign-in-button"
+                  disabled={forgotPasswordLoading}
+                  style={{ margin: 0 }}
+                >
+                  {forgotPasswordLoading ? 'Sending...' : 'Send Password Reset'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Password Change Modal */}
+      {showPasswordChange && (
+        <div className="modal-overlay">
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+            <h2 style={{ marginTop: 0 }}>Change Password</h2>
+            <p style={{ color: '#666', marginBottom: '20px' }}>
+              You are using a temporary password. Please enter it again and set a new password.
+            </p>
+            <form onSubmit={handlePasswordChange}>
+              <div className="form-group">
+                <label>Enter Temporary Password</label>
+                <input
+                  type="password"
+                  value={tempPassword}
+                  onChange={(e) => setTempPassword(e.target.value)}
+                  required
+                  autoFocus
+                  placeholder="Enter your temporary password"
+                />
+              </div>
+              <div className="form-group">
+                <label>Enter New Password</label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  required
+                  placeholder="Enter your new password"
+                  minLength={6}
+                />
+              </div>
+              <div className="form-group">
+                <label>Confirm New Password</label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
+                  placeholder="Confirm your new password"
+                  minLength={6}
+                />
+              </div>
+              {passwordChangeError && (
+                <div
+                  className="error-message"
+                  style={{
+                    marginBottom: '15px',
+                    padding: '10px',
+                    borderRadius: '5px',
+                    backgroundColor: '#f8d7da',
+                    color: '#721c24',
+                  }}
+                >
+                  {passwordChangeError}
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                <button
+                  type="submit"
+                  className="sign-in-button"
+                  disabled={passwordChangeLoading}
+                  style={{ margin: 0 }}
+                >
+                  {passwordChangeLoading ? 'Changing...' : 'Change Password'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

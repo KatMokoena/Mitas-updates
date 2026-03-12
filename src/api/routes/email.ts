@@ -55,7 +55,7 @@ router.post('/config', async (req: AuthenticatedRequest, res: Response) => {
   }
 
   try {
-    const { host, port, secure, auth, from, to } = req.body;
+    const { host, port, secure, auth, from, fromName, to } = req.body;
 
     if (!host || !port || !auth?.user || !auth?.password || !from || !to) {
       res.status(400).json({
@@ -73,6 +73,7 @@ router.post('/config', async (req: AuthenticatedRequest, res: Response) => {
         password: auth.password,
       },
       from,
+      fromName: fromName || 'MITAS - IPMP UPDATES',
       to: Array.isArray(to) ? to : [to],
     });
 

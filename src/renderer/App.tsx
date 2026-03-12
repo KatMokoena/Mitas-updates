@@ -8,6 +8,7 @@ import OrderTimelineEnhanced from './components/OrderTimelineEnhanced';
 import CreateOrder from './components/CreateOrder';
 import Tasks from './components/Tasks';
 import AllProjectsGantt from './components/AllProjectsGantt';
+import Projects from './components/Projects';
 import Settings from './components/Settings';
 import TimeTracking from './components/TimeTracking';
 import Layout from './components/Layout';
@@ -242,6 +243,7 @@ const App: React.FC = () => {
             <Route path="orders/tasks" element={<ProtectedRoute route="tasks"><Tasks /></ProtectedRoute>} />
             <Route path="orders/:id" element={<ProtectedRoute route="orders"><OrderTimelineEnhanced /></ProtectedRoute>} />
             <Route path="all-projects-gantt" element={<ProtectedRoute route="all-projects-gantt"><AllProjectsGantt /></ProtectedRoute>} />
+            <Route path="projects" element={<ProtectedRoute route="orders"><Projects /></ProtectedRoute>} />
             <Route path="users" element={<ProtectedRoute route="users"><Users /></ProtectedRoute>} />
             <Route path="settings" element={<ProtectedRoute route="settings"><Settings /></ProtectedRoute>} />
             <Route path="projects/:projectId/time-tracking" element={<ProtectedRoute route="orders"><TimeTracking /></ProtectedRoute>} />

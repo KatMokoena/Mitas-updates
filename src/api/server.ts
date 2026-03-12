@@ -14,6 +14,8 @@ import invitationsRoutes from './routes/invitations';
 import requisitionsRoutes from './routes/requisitions';
 import timeTrackingRoutes from './routes/timeTracking';
 import cliftonStrengthsRoutes from './routes/cliftonStrengths';
+import analyticsRoutes from './routes/analytics';
+import webhooksRoutes from './routes/webhooks';
 
 export const apiRouter = express.Router();
 
@@ -36,6 +38,8 @@ apiRouter.use('/invitations', invitationsRoutes);
 apiRouter.use('/requisitions', requisitionsRoutes);
 apiRouter.use('/time-tracking', timeTrackingRoutes);
 apiRouter.use('/clifton-strengths', cliftonStrengthsRoutes);
+apiRouter.use('/analytics', analyticsRoutes);
+apiRouter.use('/webhooks', webhooksRoutes);
 
 // Health check endpoint
 apiRouter.get('/health', (req, res) => {

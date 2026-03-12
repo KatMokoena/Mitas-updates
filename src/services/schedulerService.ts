@@ -8,14 +8,49 @@ export class SchedulerService {
   private emailService: EmailService;
   private pdfService: PdfService;
   private scheduledTask: cron.ScheduledTask | null = null;
+  private scheduledHour: number = 18; // Default: 6 PM
+  private scheduledMinute: number = 55; // Default: 55 minutes past the hour
 
   constructor(emailService: EmailService, pdfService: PdfService) {
     this.emailService = emailService;
     this.pdfService = pdfService;
+    this.loadScheduleFromEnv();
   }
 
   /**
-   * Start the daily email scheduler (runs at 15:32 (3:32 PM) every day, Johannesburg time)
+   * Load schedule time from environment variables
+   * Supports format: HH:MM (24-hour format)
+   * Example: EMAIL_SCHEDULE_TIME=18:55 or EMAIL_SCHEDULE_TIME=08:00
+   */
+  private loadScheduleFromEnv(): void {
+    const scheduleTime = process.env.EMAIL_SCHEDULE_TIME || '';
+    
+    if (scheduleTime) {
+      // Parse time in format HH:MM
+      const timeMatch = scheduleTime.trim().match(/^(\d{1,2}):(\d{2})$/);
+      if (timeMatch) {
+        const hour = parseInt(timeMatch[1], 10);
+        const minute = parseInt(timeMatch[2], 10);
+        
+        if (hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) {
+          this.scheduledHour = hour;
+          this.scheduledMinute = minute;
+          console.log(`📅 Email schedule time loaded from .env: ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`);
+        } else {
+          console.warn(`⚠️  Invalid EMAIL_SCHEDULE_TIME format: ${scheduleTime}. Using default: 18:55`);
+        }
+      } else {
+        console.warn(`⚠️  Invalid EMAIL_SCHEDULE_TIME format: ${scheduleTime}. Expected HH:MM (24-hour format). Using default: 18:55`);
+      }
+    } else {
+      console.log(`📅 Using default email schedule time: 18:55 (set EMAIL_SCHEDULE_TIME in .env to customize)`);
+    }
+  }
+
+  /**
+   * Start the daily email scheduler
+   * Time is configurable via EMAIL_SCHEDULE_TIME environment variable (format: HH:MM)
+   * Default: 18:55 (6:55 PM) Johannesburg time
    */
   startDailyEmailScheduler(): void {
     // Stop any existing scheduler first
@@ -24,10 +59,22 @@ export class SchedulerService {
       this.scheduledTask = null;
     }
 
-    // Cron expression: "32 15 * * *" means "at 15:32 (3:32 PM) every day"
+    // Reload schedule from env in case it changed
+    this.loadScheduleFromEnv();
+
+    // Cron expression: "minute hour * * *" means "at hour:minute every day"
     // Format: minute hour day month day-of-week
-    const cronExpression = '55 18 * * *';
-    console.log(`Setting up cron schedule: ${cronExpression} (18:55 / 6:55 PM)`);
+    const cronExpression = `${this.scheduledMinute} ${this.scheduledHour} * * *`;
+    const timeString = `${String(this.scheduledHour).padStart(2, '0')}:${String(this.scheduledMinute).padStart(2, '0')}`;
+    const time12Hour = this.scheduledHour > 12 
+      ? `${this.scheduledHour - 12}:${String(this.scheduledMinute).padStart(2, '0')} PM`
+      : this.scheduledHour === 12
+      ? `12:${String(this.scheduledMinute).padStart(2, '0')} PM`
+      : this.scheduledHour === 0
+      ? `12:${String(this.scheduledMinute).padStart(2, '0')} AM`
+      : `${this.scheduledHour}:${String(this.scheduledMinute).padStart(2, '0')} AM`;
+    
+    console.log(`Setting up cron schedule: ${cronExpression} (${timeString} / ${time12Hour})`);
     console.log(`Timezone: Africa/Johannesburg`);
     
     this.scheduledTask = cron.schedule(cronExpression, async () => {
@@ -53,14 +100,23 @@ export class SchedulerService {
 
     // Verify the task was created
     if (this.scheduledTask) {
+      const timeString = `${String(this.scheduledHour).padStart(2, '0')}:${String(this.scheduledMinute).padStart(2, '0')}`;
+      const time12Hour = this.scheduledHour > 12 
+        ? `${this.scheduledHour - 12}:${String(this.scheduledMinute).padStart(2, '0')} PM`
+        : this.scheduledHour === 12
+        ? `12:${String(this.scheduledMinute).padStart(2, '0')} PM`
+        : this.scheduledHour === 0
+        ? `12:${String(this.scheduledMinute).padStart(2, '0')} AM`
+        : `${this.scheduledHour}:${String(this.scheduledMinute).padStart(2, '0')} AM`;
+      
       console.log('✅ Daily email scheduler started successfully');
-      console.log('   Schedule: Every day at 18:55 (6:55 PM)');
+      console.log(`   Schedule: Every day at ${timeString} (${time12Hour})`);
       console.log('   Timezone: Africa/Johannesburg');
       
       // Calculate and display next run time
       const now = new Date();
       const nextRun = new Date();
-      nextRun.setHours(18, 55, 0, 0);
+      nextRun.setHours(this.scheduledHour, this.scheduledMinute, 0, 0);
       if (nextRun <= now) {
         nextRun.setDate(nextRun.getDate() + 1);
       }
@@ -110,7 +166,10 @@ export class SchedulerService {
       });
 
       if (orders.length === 0) {
-        console.log('No orders found. Skipping email.');
+        console.log('No orders found. Sending notification email without PDFs...');
+        // Send email indicating no active projects
+        await this.emailService.sendDailyReports([]);
+        console.log('✅ Notification email sent (no active projects)');
         return;
       }
 
@@ -148,19 +207,22 @@ export class SchedulerService {
   /**
    * Get scheduler status
    */
-  getStatus(): { running: boolean; nextRun?: string } {
+  getStatus(): { running: boolean; nextRun?: string; scheduleTime?: string } {
     const running = this.scheduledTask !== null;
-    // Calculate next run time (15:21 / 3:21 PM today or tomorrow)
+    // Calculate next run time using configured schedule
     const now = new Date();
     const nextRun = new Date();
-    nextRun.setHours(18, 54, 0, 0);
+    nextRun.setHours(this.scheduledHour, this.scheduledMinute, 0, 0);
     if (nextRun <= now) {
       nextRun.setDate(nextRun.getDate() + 1);
     }
 
+    const timeString = `${String(this.scheduledHour).padStart(2, '0')}:${String(this.scheduledMinute).padStart(2, '0')}`;
+
     return {
       running,
       nextRun: running ? nextRun.toISOString() : undefined,
+      scheduleTime: timeString,
     };
   }
 }

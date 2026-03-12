@@ -20,14 +20,32 @@ export class RequisitionStatusHistoryEntity {
   @Column('uuid')
   requestedBy!: string; // User ID who created the requisition
 
+  @Column({ nullable: true })
+  requestedByName?: string; // Name of user who created the requisition
+
+  @Column({ nullable: true })
+  requestedBySurname?: string; // Surname of user who created the requisition
+
+  @Column({ nullable: true })
+  requestedByEmail?: string; // Email of user who created the requisition
+
   @Column('simple-array', { nullable: true })
   approverIds?: string[]; // User IDs who need to approve
+
+  @Column('text', { nullable: true })
+  approverNames?: string; // JSON string of approver names, surnames, emails
 
   @Column('simple-array', { nullable: true })
   approvedByIds?: string[]; // User IDs who have approved (at time of status change)
 
+  @Column('text', { nullable: true })
+  approvedByNames?: string; // JSON string of approver names, surnames, emails
+
   @Column('simple-array', { nullable: true })
   rejectedByIds?: string[]; // User IDs who have rejected (at time of status change)
+
+  @Column('text', { nullable: true })
+  rejectedByNames?: string; // JSON string of rejector names, surnames, emails
 
   @Column({
     type: 'text',
@@ -43,6 +61,15 @@ export class RequisitionStatusHistoryEntity {
   @Column('uuid', { nullable: true })
   changedBy?: string; // User ID who caused this status change (approver/rejector)
 
+  @Column({ nullable: true })
+  changedByName?: string; // Name of user who caused this status change
+
+  @Column({ nullable: true })
+  changedBySurname?: string; // Surname of user who caused this status change
+
+  @Column({ nullable: true })
+  changedByEmail?: string; // Email of user who caused this status change
+
   @Column('text', { nullable: true })
   rejectionReason?: string; // Reason if rejected
 
@@ -55,6 +82,8 @@ export class RequisitionStatusHistoryEntity {
   @CreateDateColumn()
   createdAt!: Date; // When this status was recorded
 }
+
+
 
 
 

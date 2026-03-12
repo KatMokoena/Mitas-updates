@@ -47,14 +47,18 @@ const RequisitionForm: React.FC<RequisitionFormProps> = ({ orderId, equipmentIte
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showProcurementForm, setShowProcurementForm] = useState<string | null>(null);
-  const [procurementData, setProcurementData] = useState<Record<string, { itemName: string; itemCode: string; itemDescription: string; quantity: number; customerNumber: string; additionalCriteria?: string; taggedUsers: string[] }>>({});
+  const [procurementData, setProcurementData] = useState<Record<string, { itemName: string; itemCode: string; itemDescription: string; quantity: number; customerNumber: string; additionalCriteria?: string; taggedUsers: string[]; uploadedFile?: File | null }>>({});
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [orderInfo, setOrderInfo] = useState<{ customerName?: string; orderNumber?: string } | null>(null);
+  const [savedProcurementDocs, setSavedProcurementDocs] = useState<any[]>([]);
+  const [loadingDocs, setLoadingDocs] = useState(false);
+  const [attachedDocuments, setAttachedDocuments] = useState<Array<{ file: File; label: string }>>([]);
 
   useEffect(() => {
     fetchApprovers();
     fetchAllUsers();
     fetchOrderInfo();
+    fetchSavedProcurementDocuments();
   }, [orderId]);
 
   const fetchOrderInfo = async () => {
@@ -73,6 +77,106 @@ const RequisitionForm: React.FC<RequisitionFormProps> = ({ orderId, equipmentIte
       }
     } catch (error) {
       console.error('Failed to fetch order info:', error);
+    }
+  };
+
+  const fetchSavedProcurementDocuments = async () => {
+    try {
+      setLoadingDocs(true);
+      const sessionId = localStorage.getItem('sessionId');
+      const response = await fetch(`${API_BASE_URL}/api/requisitions/procurement-documents/${orderId}`, {
+        headers: { 'x-session-id': sessionId || '' },
+      });
+
+      if (response.ok) {
+        const documents = await response.json();
+        setSavedProcurementDocs(documents);
+      }
+    } catch (error) {
+      console.error('Failed to fetch saved procurement documents:', error);
+    } finally {
+      setLoadingDocs(false);
+    }
+  };
+
+  const handleDownloadSavedDocument = async (documentId: string, fileName: string) => {
+    try {
+      const sessionId = localStorage.getItem('sessionId');
+      const response = await fetch(`${API_BASE_URL}/api/requisitions/procurement-documents/${documentId}/download`, {
+        headers: { 'x-session-id': sessionId || '' },
+      });
+
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      } else {
+        const data = await response.json();
+        alert(data.error || 'Failed to download document');
+      }
+    } catch (error) {
+      console.error('Failed to download document:', error);
+      alert('Failed to download document');
+    }
+  };
+
+  const handleDownloadUploadedDocument = async (documentId: string, fileName: string) => {
+    try {
+      const sessionId = localStorage.getItem('sessionId');
+      const response = await fetch(`${API_BASE_URL}/api/requisitions/procurement-documents/${documentId}/download-uploaded`, {
+        headers: { 'x-session-id': sessionId || '' },
+      });
+
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      } else {
+        const data = await response.json();
+        alert(data.error || 'Failed to download uploaded document');
+      }
+    } catch (error) {
+      console.error('Failed to download uploaded document:', error);
+      alert('Failed to download uploaded document');
+    }
+  };
+
+  const handleDownloadRequisitionDocument = async (documentId: string, fileName: string) => {
+    try {
+      const sessionId = localStorage.getItem('sessionId');
+      const response = await fetch(`${API_BASE_URL}/api/requisitions/documents/${documentId}/download`, {
+        headers: { 'x-session-id': sessionId || '' },
+      });
+
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      } else {
+        const data = await response.json();
+        alert(data.error || 'Failed to download document');
+      }
+    } catch (error) {
+      console.error('Failed to download requisition document:', error);
+      alert('Failed to download document');
     }
   };
 
@@ -157,21 +261,35 @@ const RequisitionForm: React.FC<RequisitionFormProps> = ({ orderId, equipmentIte
         availabilityNotes: availabilityNotes[item.id] || '',
       }));
 
+      // Use FormData to support file uploads
+      const formDataToSend = new FormData();
+      formDataToSend.append('orderId', formData.orderId);
+      formDataToSend.append('items', JSON.stringify(requisitionItems));
+      formDataToSend.append('notes', formData.notes || '');
+      formDataToSend.append('approverIds', JSON.stringify(formData.approverIds));
+      
+      // Add attached documents with their labels
+      attachedDocuments.forEach((doc) => {
+        formDataToSend.append('documents', doc.file);
+      });
+      
+      // Add document labels as JSON array (matching order with files)
+      const documentLabels = attachedDocuments.map(doc => doc.label || doc.file.name);
+      formDataToSend.append('documentLabels', JSON.stringify(documentLabels));
+
       const response = await fetch(`${API_BASE_URL}/api/requisitions`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           'x-session-id': sessionId || '',
+          // Don't set Content-Type header - browser will set it with boundary for FormData
         },
-        body: JSON.stringify({
-          orderId: formData.orderId,
-          items: requisitionItems,
-          notes: formData.notes,
-          approverIds: formData.approverIds,
-        }),
+        body: formDataToSend,
       });
 
       if (response.ok) {
+        // Refresh the documents list to show newly uploaded documents
+        await fetchSavedProcurementDocuments();
+        
         if (onSuccess) {
           onSuccess();
         }
@@ -281,6 +399,7 @@ const RequisitionForm: React.FC<RequisitionFormProps> = ({ orderId, equipmentIte
                                       customerNumber: '',
                                       additionalCriteria: '',
                                       taggedUsers: [],
+                                      uploadedFile: null,
                                     },
                                   });
                                 }
@@ -309,6 +428,248 @@ const RequisitionForm: React.FC<RequisitionFormProps> = ({ orderId, equipmentIte
                   })}
                 </tbody>
               </table>
+            </div>
+          </div>
+
+          <div className="form-section">
+            <h3>Saved Procurement Documents</h3>
+            {loadingDocs ? (
+              <p>Loading documents...</p>
+            ) : savedProcurementDocs.length === 0 ? (
+              <p style={{ color: '#94a3b8', fontStyle: 'italic' }}>No procurement documents or uploaded files have been generated yet.</p>
+            ) : (
+              <div className="procurement-docs-list" style={{ marginTop: '1rem' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                      <th style={{ textAlign: 'left', padding: '0.75rem', fontSize: '0.875rem', fontWeight: 600 }}>Item Code</th>
+                      <th style={{ textAlign: 'left', padding: '0.75rem', fontSize: '0.875rem', fontWeight: 600 }}>Item Name</th>
+                      <th style={{ textAlign: 'left', padding: '0.75rem', fontSize: '0.875rem', fontWeight: 600 }}>Quantity</th>
+                      <th style={{ textAlign: 'left', padding: '0.75rem', fontSize: '0.875rem', fontWeight: 600 }}>Created</th>
+                      <th style={{ textAlign: 'center', padding: '0.75rem', fontSize: '0.875rem', fontWeight: 600 }}>Documents</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {savedProcurementDocs.map((doc) => {
+                      const isRequisitionDoc = doc.documentType === 'requisition';
+                      const createdAt = doc.createdAt || doc.uploadedAt;
+                      
+                      return (
+                        <tr key={doc.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                          <td style={{ padding: '0.75rem', fontSize: '0.875rem' }}>
+                            {isRequisitionDoc ? (
+                              <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>N/A</span>
+                            ) : (
+                              doc.itemCode
+                            )}
+                          </td>
+                          <td style={{ padding: '0.75rem', fontSize: '0.875rem' }}>
+                            {isRequisitionDoc ? (
+                              <div>
+                                <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '2px' }}>
+                                  {doc.description || doc.itemName}
+                                </div>
+                                <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontStyle: 'italic' }}>
+                                  File: {doc.fileName}
+                                </div>
+                              </div>
+                            ) : (
+                              doc.itemName
+                            )}
+                          </td>
+                          <td style={{ padding: '0.75rem', fontSize: '0.875rem' }}>
+                            {isRequisitionDoc ? (
+                              <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>N/A</span>
+                            ) : (
+                              doc.quantity
+                            )}
+                          </td>
+                          <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#94a3b8' }}>
+                            {createdAt ? (
+                              <>
+                                {new Date(createdAt).toLocaleDateString()} {new Date(createdAt).toLocaleTimeString()}
+                              </>
+                            ) : (
+                              'N/A'
+                            )}
+                          </td>
+                          <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                            <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                              {isRequisitionDoc ? (
+                                // Requisition document - show single download button
+                                <button
+                                  type="button"
+                                  onClick={() => handleDownloadRequisitionDocument(doc.id, doc.fileName)}
+                                  className="btn-secondary"
+                                  style={{
+                                    padding: '0.5rem 1rem',
+                                    fontSize: '0.875rem',
+                                    background: '#8b5cf6',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '6px',
+                                    cursor: 'pointer',
+                                    whiteSpace: 'nowrap',
+                                  }}
+                                  title={`Download Document: ${doc.fileName}`}
+                                >
+                                  Download Document
+                                </button>
+                              ) : (
+                                // Procurement document - show Requisition PDF and optional Uploaded File buttons
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDownloadSavedDocument(doc.id, doc.fileName)}
+                                    className="btn-secondary"
+                                    style={{
+                                      padding: '0.5rem 1rem',
+                                      fontSize: '0.875rem',
+                                      background: '#3498DB',
+                                      color: 'white',
+                                      border: 'none',
+                                      borderRadius: '6px',
+                                      cursor: 'pointer',
+                                      whiteSpace: 'nowrap',
+                                    }}
+                                    title="Download Requisition PDF"
+                                  >
+                                    Requisition PDF
+                                  </button>
+                                  {doc.uploadedFileName && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDownloadUploadedDocument(doc.id, doc.uploadedFileName)}
+                                      className="btn-secondary"
+                                      style={{
+                                        padding: '0.5rem 1rem',
+                                        fontSize: '0.875rem',
+                                        background: '#10b981',
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '6px',
+                                        cursor: 'pointer',
+                                        whiteSpace: 'nowrap',
+                                      }}
+                                      title={`Download Uploaded Document: ${doc.uploadedFileName}`}
+                                    >
+                                      Uploaded File
+                                    </button>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          <div className="form-section" style={{ 
+            borderTop: '3px solid #f97316', 
+            borderLeft: '4px solid #f97316',
+            paddingTop: '24px', 
+            paddingLeft: '20px',
+            marginTop: '40px', 
+            marginBottom: '30px',
+            backgroundColor: 'rgba(249, 115, 22, 0.08)',
+            borderRadius: '8px',
+            boxShadow: '0 2px 8px rgba(249, 115, 22, 0.2)'
+          }}>
+            <h3 style={{ 
+              color: '#f97316', 
+              fontSize: '22px', 
+              fontWeight: 700, 
+              marginBottom: '20px',
+              textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)'
+            }}>📎 Attach Documents (Optional)</h3>
+            <div className="form-group">
+              <label style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-main)' }}>Upload Documents</label>
+              <input
+                type="file"
+                multiple
+                accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
+                onChange={(e) => {
+                  const files = Array.from(e.target.files || []);
+                  setAttachedDocuments(files.map(file => ({ file, label: file.name })));
+                }}
+                style={{
+                  padding: '8px',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  borderRadius: '6px',
+                  background: 'rgba(15, 23, 42, 0.3)',
+                  color: 'var(--text-main)',
+                  width: '100%',
+                  fontSize: '14px',
+                }}
+              />
+              {attachedDocuments.length > 0 && (
+                <div style={{ marginTop: '12px' }}>
+                  <small style={{ color: '#94a3b8', fontSize: '0.75rem', display: 'block', marginBottom: '8px', fontWeight: 600 }}>
+                    Selected files ({attachedDocuments.length}) - Please provide a label for each document:
+                  </small>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {attachedDocuments.map((doc, index) => (
+                      <div
+                        key={index}
+                        style={{
+                          padding: '12px',
+                          background: 'rgba(15, 23, 42, 0.6)',
+                          borderRadius: '6px',
+                          border: '1px solid rgba(255, 255, 255, 0.1)',
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                          <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{doc.file.name}</span>
+                          <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{(doc.file.size / 1024).toFixed(2)} KB</span>
+                        </div>
+                        <input
+                          type="text"
+                          value={doc.label}
+                          onChange={(e) => {
+                            const newDocs = [...attachedDocuments];
+                            newDocs[index].label = e.target.value;
+                            setAttachedDocuments(newDocs);
+                          }}
+                          placeholder="Enter a label/name for this document (e.g., 'Invoice', 'Contract', 'Specification')"
+                          style={{
+                            width: '100%',
+                            padding: '8px',
+                            border: '1px solid rgba(255, 255, 255, 0.2)',
+                            borderRadius: '4px',
+                            background: 'rgba(15, 23, 42, 0.8)',
+                            color: 'var(--text-main)',
+                            fontSize: '0.875rem',
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newDocs = attachedDocuments.filter((_, i) => i !== index);
+                            setAttachedDocuments(newDocs);
+                          }}
+                          style={{
+                            marginTop: '6px',
+                            padding: '4px 8px',
+                            fontSize: '0.75rem',
+                            background: '#ef4444',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -386,6 +747,7 @@ const RequisitionForm: React.FC<RequisitionFormProps> = ({ orderId, equipmentIte
             customerNumber: '',
             additionalCriteria: '',
             taggedUsers: [],
+            uploadedFile: null,
           };
 
           return (
@@ -498,6 +860,37 @@ const RequisitionForm: React.FC<RequisitionFormProps> = ({ orderId, equipmentIte
                       ))}
                     </div>
                   </div>
+                  <div className="form-group">
+                    <label>Attach Document (Optional)</label>
+                    <input
+                      type="file"
+                      accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0] || null;
+                        setProcurementData({
+                          ...procurementData,
+                          [showProcurementForm]: {
+                            ...procurement,
+                            uploadedFile: file,
+                          },
+                        });
+                      }}
+                      style={{
+                        padding: '8px',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        borderRadius: '6px',
+                        background: 'rgba(15, 23, 42, 0.3)',
+                        color: 'var(--text-main)',
+                        width: '100%',
+                        fontSize: '14px',
+                      }}
+                    />
+                    {procurement.uploadedFile && (
+                      <small style={{ color: '#94a3b8', fontSize: '0.75rem', marginTop: '4px', display: 'block' }}>
+                        Selected: {procurement.uploadedFile.name} ({(procurement.uploadedFile.size / 1024).toFixed(2)} KB)
+                      </small>
+                    )}
+                  </div>
                   <div className="form-actions">
                     <button
                       type="button"
@@ -517,22 +910,34 @@ const RequisitionForm: React.FC<RequisitionFormProps> = ({ orderId, equipmentIte
 
                         try {
                           const sessionId = localStorage.getItem('sessionId');
+                          
+                          // Use FormData to support file upload
+                          const formData = new FormData();
+                          formData.append('itemName', procurement.itemName);
+                          formData.append('itemCode', procurement.itemCode);
+                          formData.append('itemDescription', procurement.itemDescription);
+                          formData.append('quantity', procurement.quantity.toString());
+                          formData.append('customerNumber', procurement.customerNumber);
+                          if (procurement.additionalCriteria) {
+                            formData.append('additionalCriteria', procurement.additionalCriteria);
+                          }
+                          if (procurement.taggedUsers && procurement.taggedUsers.length > 0) {
+                            formData.append('taggedUsers', JSON.stringify(procurement.taggedUsers));
+                          }
+                          formData.append('orderId', orderId);
+                          
+                          // Add file if selected
+                          if (procurement.uploadedFile) {
+                            formData.append('uploadedFile', procurement.uploadedFile);
+                          }
+
                           const response = await fetch(`${API_BASE_URL}/api/requisitions/generate-procurement-pdf`, {
                             method: 'POST',
                             headers: {
-                              'Content-Type': 'application/json',
                               'x-session-id': sessionId || '',
+                              // Don't set Content-Type header - browser will set it with boundary for FormData
                             },
-                            body: JSON.stringify({
-                              itemName: procurement.itemName,
-                              itemCode: procurement.itemCode,
-                              itemDescription: procurement.itemDescription,
-                              quantity: procurement.quantity,
-                              customerNumber: procurement.customerNumber,
-                              additionalCriteria: procurement.additionalCriteria,
-                              taggedUsers: procurement.taggedUsers,
-                              orderId: orderId,
-                            }),
+                            body: formData,
                           });
 
                           if (response.ok) {
@@ -547,13 +952,26 @@ const RequisitionForm: React.FC<RequisitionFormProps> = ({ orderId, equipmentIte
                             document.body.removeChild(a);
                             alert('Procurement Request PDF generated and downloaded successfully!');
                             setShowProcurementForm(null);
+                            // Clear the uploaded file from state
+                            setProcurementData({
+                              ...procurementData,
+                              [showProcurementForm]: {
+                                ...procurement,
+                                uploadedFile: null,
+                              },
+                            });
+                            // Refresh saved documents list
+                            fetchSavedProcurementDocuments();
                           } else {
                             const data = await response.json();
-                            alert(data.error || 'Failed to generate PDF');
+                            const errorMsg = data.details ? `${data.error}: ${data.details}` : data.error || 'Failed to generate PDF';
+                            alert(errorMsg);
+                            console.error('PDF generation error:', data);
                           }
                         } catch (error) {
                           console.error('Failed to generate procurement PDF:', error);
-                          alert('Failed to generate PDF');
+                          const errorMsg = error instanceof Error ? error.message : 'Failed to generate PDF';
+                          alert(`Failed to generate PDF: ${errorMsg}`);
                         }
                       }}
                       className="btn-primary"

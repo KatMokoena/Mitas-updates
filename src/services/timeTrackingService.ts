@@ -94,11 +94,13 @@ export class TimeTrackingService {
 
     const startTime = new Date();
     const timeEntry = timeEntryRepository.create({
-      id: uuidv4(),
       projectId,
       taskId,
       orderId,
       userId,
+      userName: user.name || undefined,
+      userSurname: user.surname || undefined,
+      userEmail: user.email || undefined,
       entryType: TimeEntryType.TIMER,
       status: TimeEntryStatus.RUNNING,
       startTime,
@@ -107,7 +109,7 @@ export class TimeTrackingService {
       description,
       departmentId: user.departmentId,
     });
-
+    timeEntry.id = uuidv4();
     return await timeEntryRepository.save(timeEntry);
   }
 
@@ -189,11 +191,13 @@ export class TimeTrackingService {
     const endTime = new Date(startTime.getTime() + durationHours * 60 * 60 * 1000);
 
     const timeEntry = timeEntryRepository.create({
-      id: uuidv4(),
       projectId,
       taskId,
       orderId,
       userId,
+      userName: user.name || undefined,
+      userSurname: user.surname || undefined,
+      userEmail: user.email || undefined,
       entryType: TimeEntryType.MANUAL,
       status: TimeEntryStatus.COMPLETED,
       startTime,
@@ -203,7 +207,7 @@ export class TimeTrackingService {
       notes,
       departmentId: user.departmentId,
     });
-
+    timeEntry.id = uuidv4();
     return await timeEntryRepository.save(timeEntry);
   }
 

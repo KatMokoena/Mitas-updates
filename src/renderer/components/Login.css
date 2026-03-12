@@ -3,7 +3,7 @@
   width: 100vw;
   height: 100vh;
   overflow: hidden;
-  /* Translucent background with gradient */
+  /* Base background */
   background: 
     linear-gradient(135deg, rgba(44, 62, 80, 0.85) 0%, rgba(52, 73, 94, 0.88) 50%, rgba(26, 37, 47, 0.9) 100%),
     url('data:image/svg+xml,<svg width="100" height="100" xmlns="http://www.w3.org/2000/svg"><defs><pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(255,255,255,0.03)" stroke-width="1"/></pattern></defs><rect width="100" height="100" fill="url(%23grid)"/></svg>');
@@ -12,6 +12,37 @@
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+/* Rotating background gradient overlay */
+.login-container::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(
+    135deg,
+    rgba(44, 62, 80, 0.3) 0%,
+    rgba(52, 73, 94, 0.3) 25%,
+    rgba(26, 37, 47, 0.3) 50%,
+    rgba(44, 62, 80, 0.3) 75%,
+    rgba(52, 73, 94, 0.3) 100%
+  );
+  animation: backgroundRotate 30s linear infinite;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* Rotating background gradient animation */
+@keyframes backgroundRotate {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 /* Light Watermarks - Mitas Corp Pic */
@@ -28,15 +59,17 @@
 
 .watermark {
   position: absolute;
-  opacity: 0.08;
-  filter: blur(1px);
+  opacity: 0.25;
+  filter: blur(0.5px);
   transition: opacity 0.3s ease;
+  mix-blend-mode: multiply;
 }
 
 .watermark-image {
   max-width: 200px;
   height: auto;
   object-fit: contain;
+  filter: brightness(0.9) contrast(1.2);
 }
 
 /* Spinning animation for watermarks - each spins slowly in place */
@@ -44,24 +77,28 @@
   top: 10%;
   left: 5%;
   animation: spin1 20s linear infinite;
+  z-index: 2;
 }
 
 .watermark-2 {
   top: 25%;
   right: 4%;
   animation: spin2 25s linear infinite;
+  z-index: 2;
 }
 
 .watermark-3 {
   bottom: 20%;
   left: 5%;
   animation: spin3 22s linear infinite;
+  z-index: 2;
 }
 
 .watermark-4 {
   bottom: 15%;
   right: 5%;
   animation: spin4 12s linear infinite;
+  z-index: 2;
 }
 
 /* Spinning animations - each starts from its initial rotation and spins 360deg */
@@ -209,17 +246,61 @@
   align-items: center;
   gap: 0;
   padding: 0 40px;
+  isolation: isolate;
 }
 
 /* Left Section - Dark Teal Background with Large MITAS Logo */
 .login-left-section {
-  background: transparent;
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   height: 100%;
   display: flex;
   justify-content: center;
   align-items: center;
   position: relative;
   padding: 40px;
+  border-radius: 0 20px 20px 0;
+  border-right: 2px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 
+    inset 0 0 40px rgba(255, 255, 255, 0.2),
+    0 0 20px rgba(255, 255, 255, 0.1);
+  /* Allow watermarks to show through */
+  isolation: isolate;
+}
+
+/* Additional watermarks specifically for left section visibility */
+.login-left-section::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: url('../../../public/Mitas Corp Pic.png');
+  background-size: 180px;
+  background-position: center;
+  background-repeat: no-repeat;
+  opacity: 0.15;
+  mix-blend-mode: multiply;
+  pointer-events: none;
+  z-index: 0;
+  animation: watermarkFloat 25s ease-in-out infinite;
+}
+
+@keyframes watermarkFloat {
+  0%, 100% {
+    transform: translate(0, 0) rotate(0deg);
+    opacity: 0.15;
+  }
+  33% {
+    transform: translate(10px, -15px) rotate(5deg);
+    opacity: 0.2;
+  }
+  66% {
+    transform: translate(-8px, 10px) rotate(-3deg);
+    opacity: 0.18;
+  }
 }
 
 .left-mitas-logo {
@@ -228,7 +309,17 @@
   width: auto;
   height: auto;
   object-fit: contain;
-  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.4));
+  filter: 
+    brightness(1.1) 
+    contrast(1.15)
+    drop-shadow(0 8px 24px rgba(0, 0, 0, 0.7)) 
+    drop-shadow(0 0 15px rgba(255, 255, 255, 0.4));
+  padding: 30px;
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 15px;
+  box-shadow: 
+    0 4px 20px rgba(0, 0, 0, 0.3),
+    inset 0 0 20px rgba(255, 255, 255, 0.2);
 }
 
 /* Center - Login Form */
@@ -699,4 +790,46 @@
     max-width: 420px;
     padding: 20px;
   }
+}
+
+/* Modal Styles for Forgot Password */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.modal-content {
+  background: #fff;
+  border-radius: 8px;
+  padding: 30px;
+  max-width: 500px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  color: #333;
+}
+
+.modal-content h2 {
+  font-size: 24px;
+  color: #333;
+  margin: 0 0 20px 0;
+  font-weight: 700;
+}
+
+.success-message {
+  padding: 10px;
+  border-radius: 5px;
+  background-color: #d4edda;
+  color: #155724;
+  margin-bottom: 15px;
 }

@@ -3,10 +3,13 @@ import { AuthenticatedRequest, authMiddleware } from '../middleware/auth';
 import { getDataSource } from '../../database/config';
 import { RequisitionEntity, RequisitionItemEntity, RequisitionStatus, ItemAvailability } from '../../database/entities/Requisition';
 import { RequisitionProofEntity } from '../../database/entities/RequisitionProof';
+import { RequisitionDocumentEntity } from '../../database/entities/RequisitionDocument';
+import { ProcurementDocumentEntity } from '../../database/entities/ProcurementDocument';
 import { OrderEntity } from '../../database/entities/Order';
 import { UserEntity } from '../../database/entities/User';
 import { AuditService } from '../../services/auditService';
 import { RequisitionStatusHistoryService } from '../../services/requisitionStatusHistoryService';
+import { EmailService } from '../../services/emailService';
 import { AuditAction, AuditEntityType } from '../../database/entities/AuditLog';
 import { In, IsNull } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
@@ -17,6 +20,13 @@ import multer from 'multer';
 const router = Router();
 const auditService = new AuditService();
 const statusHistoryService = new RequisitionStatusHistoryService();
+
+let emailServiceInstance: EmailService | null = null;
+
+// Allow email service to be set from server.ts
+export function setRequisitionsEmailService(service: EmailService): void {
+  emailServiceInstance = service;
+}
 
 router.use(authMiddleware);
 
@@ -53,6 +63,21 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Allowed: PDF, PNG, JPG, DOC, DOCX'));
+    }
+  },
+});
+
+// Memory storage for procurement document uploads (stored in database)
+const memoryStorage = multer.memoryStorage();
+const uploadMemory = multer({
+  storage: memoryStorage,
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
   fileFilter: (req, file, cb) => {
     const allowedTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
@@ -308,21 +333,53 @@ router.get('/:id', async (req: AuthenticatedRequest, res: Response) => {
   }
 });
 
-// Create a new requisition
-router.post('/', async (req: AuthenticatedRequest, res: Response) => {
+// Create a new requisition (with optional file uploads)
+router.post('/', uploadMemory.array('documents', 10), async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { orderId, items, notes, approverIds } = req.body;
+    const { orderId, items, notes, approverIds, documentLabels } = req.body;
     const userId = req.user?.id;
+    const uploadedFiles = (req.files as Express.Multer.File[]) || [];
+    
+    // Parse items and approverIds if they're JSON strings (from FormData)
+    let parsedItems: any[] = [];
+    let parsedApproverIds: string[] = [];
+    let parsedDocumentLabels: string[] = [];
+    
+    try {
+      if (typeof items === 'string') {
+        parsedItems = JSON.parse(items);
+      } else if (Array.isArray(items)) {
+        parsedItems = items;
+      }
+      
+      if (typeof approverIds === 'string') {
+        parsedApproverIds = JSON.parse(approverIds);
+      } else if (Array.isArray(approverIds)) {
+        parsedApproverIds = approverIds;
+      }
+      
+      // Parse document labels if provided
+      if (documentLabels) {
+        if (typeof documentLabels === 'string') {
+          parsedDocumentLabels = JSON.parse(documentLabels);
+        } else if (Array.isArray(documentLabels)) {
+          parsedDocumentLabels = documentLabels;
+        }
+      }
+    } catch (parseError) {
+      console.error('Failed to parse form data:', parseError);
+      return res.status(400).json({ error: 'Invalid form data format' });
+    }
 
     if (!userId) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    if (!orderId || !items || !Array.isArray(items) || items.length === 0) {
+    if (!orderId || !parsedItems || !Array.isArray(parsedItems) || parsedItems.length === 0) {
       return res.status(400).json({ error: 'Order ID and items are required' });
     }
 
-    if (!approverIds || !Array.isArray(approverIds) || approverIds.length === 0) {
+    if (!parsedApproverIds || !Array.isArray(parsedApproverIds) || parsedApproverIds.length === 0) {
       return res.status(400).json({ error: 'At least one approver must be selected' });
     }
 
@@ -336,11 +393,11 @@ router.post('/', async (req: AuthenticatedRequest, res: Response) => {
     // Verify all approvers exist and have @tracesol.co.za email
     const userRepository = getDataSource().getRepository(UserEntity);
     const approvers = await userRepository.find({
-      where: { id: In(approverIds) }
+      where: { id: In(parsedApproverIds) }
     });
     
     // Check if all approver IDs were found
-    if (approvers.length !== approverIds.length) {
+    if (approvers.length !== parsedApproverIds.length) {
       return res.status(400).json({ error: 'One or more approvers not found' });
     }
     
@@ -372,7 +429,7 @@ router.post('/', async (req: AuthenticatedRequest, res: Response) => {
       }
       
       // Reset approvedByIds if adding new approvers (they need to approve)
-      requisition.approverIds = approverIds;
+      requisition.approverIds = parsedApproverIds;
       requisition.approvedByIds = [];
       requisition.rejectedByIds = existingRejectedByIds; // Preserve rejection history for traceability
       requisition.status = RequisitionStatus.PENDING_APPROVAL;
@@ -391,19 +448,33 @@ router.post('/', async (req: AuthenticatedRequest, res: Response) => {
           : undefined
       );
     } else {
+      // Get requester info
+      const requester = await userRepository.findOne({ where: { id: userId } });
+      
+      // Get approver info for JSON storage
+      const approverUserInfo = approvers.map(a => ({
+        id: a.id,
+        name: a.name || null,
+        surname: a.surname || null,
+        email: a.email || undefined,
+      }));
+      
       // Create new requisition
       requisition = requisitionRepository.create({
-        id: uuidv4(),
         orderId,
         requestedBy: userId,
-        approverIds: approverIds,
+        requestedByName: requester?.name || undefined,
+        requestedBySurname: requester?.surname || undefined,
+        requestedByEmail: requester?.email || undefined,
+        approverIds: parsedApproverIds,
+        approverNames: JSON.stringify(approverUserInfo),
         approvedByIds: [],
         rejectedByIds: [],
         status: RequisitionStatus.PENDING_APPROVAL,
         notes: notes || '',
         taskAssignmentEnabled: false, // Task assignment disabled until explicitly enabled after approval
       });
-
+      requisition.id = uuidv4();
       await requisitionRepository.save(requisition);
       
       // Log initial status to history table
@@ -429,18 +500,72 @@ router.post('/', async (req: AuthenticatedRequest, res: Response) => {
     }
     
     // Create requisition items
-    const requisitionItems = items.map((item: any) =>
-      itemRepository.create({
-        id: uuidv4(),
+    const requisitionItems = parsedItems.map((item: any) => {
+      const itemEntity = itemRepository.create({
         requisitionId: requisition.id,
         equipmentId: item.equipmentId,
         quantity: item.quantity || 1,
         availability: item.availability || ItemAvailability.NOT_AVAILABLE,
         availabilityNotes: item.availabilityNotes || '',
-      })
-    );
+      });
+      itemEntity.id = uuidv4();
+      return itemEntity;
+    });
 
     await itemRepository.save(requisitionItems);
+
+    // Save uploaded documents if any
+    if (uploadedFiles && uploadedFiles.length > 0) {
+      const requisitionDocRepository = getDataSource().getRepository(RequisitionDocumentEntity);
+      const requester = await userRepository.findOne({ where: { id: userId } });
+      
+      const documentEntities = uploadedFiles.map((file, index) => {
+        // Get the label for this document (by index), or use filename as fallback
+        const label = parsedDocumentLabels[index] || file.originalname;
+        
+        const doc = requisitionDocRepository.create({
+          requisitionId: requisition.id,
+          uploadedBy: userId,
+          uploadedByName: requester?.name || undefined,
+          uploadedBySurname: requester?.surname || undefined,
+          uploadedByEmail: requester?.email || undefined,
+          fileName: file.originalname,
+          fileData: Buffer.from(file.buffer),
+          fileSize: file.size,
+          mimeType: file.mimetype,
+          description: label, // Save the label as description
+        });
+        doc.id = uuidv4();
+        return doc;
+      });
+      
+      await requisitionDocRepository.save(documentEntities);
+    }
+
+    // Send email notifications to approvers
+    if (emailServiceInstance) {
+      try {
+        const requester = await userRepository.findOne({ where: { id: userId } });
+        const requesterName = requester ? `${requester.name} ${requester.surname}` : 'A team member';
+        
+        // Send emails to all approvers
+        for (const approverId of parsedApproverIds) {
+          const approver = approvers.find(a => a.id === approverId);
+          if (approver && approver.email) {
+            await emailServiceInstance.sendRequisitionNotificationEmail(
+              approver.email,
+              `${approver.name} ${approver.surname}`,
+              requesterName,
+              order.orderNumber,
+              requisition.id
+            );
+          }
+        }
+      } catch (emailError) {
+        console.error('Failed to send requisition notification emails:', emailError);
+        // Don't fail the requisition creation if email fails
+      }
+    }
 
     // Log audit event
     await auditService.log(wasUpdate ? AuditAction.UPDATE : AuditAction.CREATE, AuditEntityType.REQUISITION, {
@@ -448,11 +573,11 @@ router.post('/', async (req: AuthenticatedRequest, res: Response) => {
       entityId: requisition.id,
       entityName: `Requisition for Order ${order.orderNumber}`,
       description: wasUpdate 
-        ? `Updated requisition with ${items.length} items, awaiting approval from ${approverIds.length} approver(s). Previous rejection history preserved for traceability.`
-        : `Created requisition with ${items.length} items, awaiting approval from ${approverIds.length} approver(s)`,
+        ? `Updated requisition with ${parsedItems.length} items, awaiting approval from ${parsedApproverIds.length} approver(s). Previous rejection history preserved for traceability.`
+        : `Created requisition with ${parsedItems.length} items, awaiting approval from ${parsedApproverIds.length} approver(s)`,
       ipAddress: req.ip,
       userAgent: req.get('user-agent'),
-      newValues: { orderId, itemsCount: items.length, approverIds, rejectedByIds: requisition.rejectedByIds },
+      newValues: { orderId, itemsCount: parsedItems.length, approverIds: parsedApproverIds, rejectedByIds: requisition.rejectedByIds },
     });
 
     res.status(201).json({ ...requisition, items: requisitionItems });
@@ -510,11 +635,25 @@ router.patch('/:id/status', async (req: AuthenticatedRequest, res: Response) => 
     // Store previous status for history tracking
     const previousStatus = requisition.status;
 
+    // Get user info for approver/rejector
+    const userRepository = getDataSource().getRepository(UserEntity);
+    const currentUser = await userRepository.findOne({ where: { id: userId } });
+    
     // Update approval status
     if (status === RequisitionStatus.APPROVED) {
       if (!approvedByIds.includes(userId)) {
         approvedByIds.push(userId);
         requisition.approvedByIds = approvedByIds;
+        
+        // Update approver names JSON
+        const approverUserInfo = await userRepository.find({ where: { id: In(approvedByIds) } });
+        const approverInfoArray = approverUserInfo.map(u => ({
+          id: u.id,
+          name: u.name || null,
+          surname: u.surname || null,
+          email: u.email || undefined,
+        }));
+        requisition.approvedByNames = JSON.stringify(approverInfoArray);
       }
 
       // Check if all approvers have approved
@@ -547,6 +686,16 @@ router.patch('/:id/status', async (req: AuthenticatedRequest, res: Response) => 
       if (!rejectedByIds.includes(userId)) {
         rejectedByIds.push(userId);
         requisition.rejectedByIds = rejectedByIds;
+        
+        // Update rejector names JSON
+        const rejectorUserInfo = await userRepository.find({ where: { id: In(rejectedByIds) } });
+        const rejectorInfoArray = rejectorUserInfo.map(u => ({
+          id: u.id,
+          name: u.name || null,
+          surname: u.surname || null,
+          email: u.email || undefined,
+        }));
+        requisition.rejectedByNames = JSON.stringify(rejectorInfoArray);
       }
       
       // Reset viewed flag when status changes to rejected (so notification appears)
@@ -761,7 +910,6 @@ router.post('/:id/proof', upload.single('file'), async (req: AuthenticatedReques
     // Save proof document record
     const proofRepository = getDataSource().getRepository(RequisitionProofEntity);
     const proof = proofRepository.create({
-      id: uuidv4(),
       requisitionId: id,
       uploadedBy: userId,
       fileName: file.originalname,
@@ -770,7 +918,7 @@ router.post('/:id/proof', upload.single('file'), async (req: AuthenticatedReques
       fileSize: file.size,
       description: description || undefined,
     });
-
+    proof.id = uuidv4();
     await proofRepository.save(proof);
 
     // Log audit event
@@ -927,26 +1075,60 @@ router.get('/proofs/:proofId/download', async (req: AuthenticatedRequest, res: R
       }
     }
 
+    // Resolve file path - handle both absolute and relative paths
+    let filePath: string;
+    if (path.isAbsolute(proof.filePath)) {
+      filePath = proof.filePath;
+    } else {
+      // If relative, resolve from project root
+      let projectRoot = process.cwd();
+      if (__dirname.includes('dist')) {
+        projectRoot = path.resolve(__dirname, '../../..');
+      } else {
+        projectRoot = path.resolve(__dirname, '../..');
+      }
+      filePath = path.resolve(projectRoot, proof.filePath);
+    }
+
+    // Normalize the path (handle Windows/Unix differences)
+    filePath = path.normalize(filePath);
+
     // Check if file exists
-    if (!fs.existsSync(proof.filePath)) {
+    if (!fs.existsSync(filePath)) {
+      console.error(`File not found at path: ${filePath}`);
+      console.error(`Original stored path: ${proof.filePath}`);
       return res.status(404).json({ error: 'File not found on server' });
     }
 
     // Send file
-    res.setHeader('Content-Type', proof.mimeType);
-    res.setHeader('Content-Disposition', `attachment; filename="${proof.fileName}"`);
-    res.sendFile(path.resolve(proof.filePath));
+    res.setHeader('Content-Type', proof.mimeType || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(proof.fileName)}"`);
+    res.sendFile(filePath, (err) => {
+      if (err) {
+        console.error('Error sending file:', err);
+        if (!res.headersSent) {
+          res.status(500).json({ error: 'Failed to download proof document' });
+        }
+      }
+    });
   } catch (error) {
     console.error('Failed to download proof document:', error);
+    if (error instanceof Error) {
+      console.error('Error details:', error.message);
+      console.error('Stack trace:', error.stack);
+    }
+    if (!res.headersSent) {
     res.status(500).json({ error: 'Failed to download proof document' });
+    }
   }
 });
 
-// Generate Procurement Request PDF
-router.post('/generate-procurement-pdf', async (req: AuthenticatedRequest, res: Response) => {
+// Generate Procurement Request PDF (with optional file upload)
+router.post('/generate-procurement-pdf', uploadMemory.single('uploadedFile'), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { itemName, itemCode, itemDescription, quantity, customerNumber, additionalCriteria, taggedUsers, orderId } = req.body;
     const userId = req.user?.id;
+    const uploadedFile = req.file;
 
     if (!userId) {
       return res.status(401).json({ error: 'Unauthorized' });
@@ -955,6 +1137,28 @@ router.post('/generate-procurement-pdf', async (req: AuthenticatedRequest, res: 
     if (!itemCode || !itemDescription || !quantity || !customerNumber) {
       return res.status(400).json({ error: 'Item code, item description, quantity, and customer number are required' });
     }
+
+    if (!orderId) {
+      return res.status(400).json({ error: 'Order ID is required' });
+    }
+
+    // Parse taggedUsers if it's a JSON string (from FormData)
+    let parsedTaggedUsers: string[] = [];
+    if (taggedUsers) {
+      try {
+        if (typeof taggedUsers === 'string') {
+          parsedTaggedUsers = JSON.parse(taggedUsers);
+        } else if (Array.isArray(taggedUsers)) {
+          parsedTaggedUsers = taggedUsers;
+        }
+      } catch (parseError) {
+        console.warn('Failed to parse taggedUsers:', parseError);
+        parsedTaggedUsers = [];
+      }
+    }
+
+    // Parse quantity to number (FormData sends it as string)
+    const parsedQuantity = typeof quantity === 'string' ? parseInt(quantity, 10) : quantity;
 
     // Get requesting user information
     const userRepository = getDataSource().getRepository(UserEntity);
@@ -969,21 +1173,407 @@ router.post('/generate-procurement-pdf', async (req: AuthenticatedRequest, res: 
       itemName: itemName || itemDescription,
       itemCode,
       itemDescription,
-      quantity,
+      quantity: parsedQuantity,
       customerNumber,
       additionalCriteria: additionalCriteria || '',
-      taggedUsers: taggedUsers || [],
+      taggedUsers: parsedTaggedUsers || [],
       orderId: orderId || '',
       requestedBy: userId,
       requestedByName: requestingUser ? `${requestingUser.name} ${requestingUser.surname}` : 'Unknown User',
     });
 
+    // Generate filename
+    const fileName = `Procurement-Request-${(itemName || itemDescription).replace(/\s+/g, '-')}-${new Date().toISOString().split('T')[0]}.pdf`;
+    
+    // Save to database
+    let savedDocId: string | null = null;
+    try {
+      const procurementDocRepository = getDataSource().getRepository(ProcurementDocumentEntity);
+      
+      // Ensure pdfBuffer is a Buffer
+      const pdfBufferData = Buffer.isBuffer(pdfBuffer) ? pdfBuffer : Buffer.from(pdfBuffer);
+      
+      // Get tagged user info
+      let taggedUserInfoArray: any[] = [];
+      if (parsedTaggedUsers && parsedTaggedUsers.length > 0) {
+        const taggedUserEntities = await userRepository.find({ where: { id: In(parsedTaggedUsers) } });
+        taggedUserInfoArray = taggedUserEntities.map(u => ({
+          id: u.id,
+          name: u.name || null,
+          surname: u.surname || null,
+          email: u.email || undefined,
+        }));
+      }
+      
+      // Handle uploaded file if present
+      let uploadedFileData: Buffer | undefined;
+      let uploadedFileName: string | undefined;
+      let uploadedFileSize: number | undefined;
+      let uploadedFileMimeType: string | undefined;
+
+      if (uploadedFile) {
+        uploadedFileData = Buffer.from(uploadedFile.buffer);
+        uploadedFileName = uploadedFile.originalname;
+        uploadedFileSize = uploadedFile.size;
+        uploadedFileMimeType = uploadedFile.mimetype;
+      }
+
+      const procurementDoc = procurementDocRepository.create({
+        orderId,
+        createdBy: userId,
+        createdByName: requestingUser?.name || undefined,
+        createdBySurname: requestingUser?.surname || undefined,
+        createdByEmail: requestingUser?.email || undefined,
+        itemName: itemName || itemDescription,
+        itemCode,
+        itemDescription,
+        quantity: parsedQuantity,
+        customerNumber,
+        additionalCriteria: additionalCriteria || undefined,
+        fileName,
+        pdfData: pdfBufferData,
+        fileSize: pdfBufferData.length,
+        taggedUsers: parsedTaggedUsers && parsedTaggedUsers.length > 0 ? parsedTaggedUsers : undefined,
+        taggedUserNames: taggedUserInfoArray.length > 0 ? JSON.stringify(taggedUserInfoArray) : undefined,
+        uploadedFileName,
+        uploadedFileData,
+        uploadedFileSize,
+        uploadedFileMimeType,
+      });
+      procurementDoc.id = uuidv4();
+      await procurementDocRepository.save(procurementDoc);
+      savedDocId = procurementDoc.id;
+      console.log('Procurement document saved successfully:', savedDocId);
+
+      // Log audit event
+      try {
+        await auditService.log(
+          AuditAction.CREATE,
+          AuditEntityType.REQUISITION,
+          {
+            userId,
+            entityId: procurementDoc.id,
+            entityName: `Procurement Document: ${fileName}`,
+            description: `Generated procurement request PDF for ${itemCode}`,
+          ipAddress: req.ip,
+          userAgent: req.get('user-agent'),
+          newValues: { orderId, itemCode, fileName },
+        });
+      } catch (auditError) {
+        console.error('Error logging audit event:', auditError);
+        // Continue anyway - audit logging failure shouldn't block PDF generation
+      }
+    } catch (saveError) {
+      console.error('Error saving procurement document to database:', saveError);
+      const saveErrorMessage = saveError instanceof Error ? saveError.message : 'Unknown error';
+      const saveErrorStack = saveError instanceof Error ? saveError.stack : undefined;
+      console.error('Save error details:', { saveErrorMessage, saveErrorStack });
+      // Continue anyway - PDF generation succeeded, just database save failed
+      // This allows the user to still download the PDF
+    }
+
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="Procurement-Request-${itemName.replace(/\s+/g, '-')}-${new Date().toISOString().split('T')[0]}.pdf"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     res.send(pdfBuffer);
   } catch (error) {
     console.error('Failed to generate procurement PDF:', error);
-    res.status(500).json({ error: 'Failed to generate procurement PDF' });
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    console.error('Error details:', { errorMessage, errorStack });
+    res.status(500).json({ 
+      error: 'Failed to generate procurement PDF',
+      details: errorMessage 
+    });
+  }
+});
+
+// Get all procurement documents for an order
+router.get('/procurement-documents/:orderId', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { orderId } = req.params;
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const procurementDocRepository = getDataSource().getRepository(ProcurementDocumentEntity);
+    const documents = await procurementDocRepository.find({
+      where: { orderId },
+      order: { createdAt: 'DESC' },
+    });
+
+    // Return metadata without PDF data
+    const documentsMetadata = documents.map(doc => ({
+      id: doc.id,
+      orderId: doc.orderId,
+      createdBy: doc.createdBy,
+      itemName: doc.itemName,
+      itemCode: doc.itemCode,
+      itemDescription: doc.itemDescription,
+      quantity: doc.quantity,
+      customerNumber: doc.customerNumber,
+      additionalCriteria: doc.additionalCriteria,
+      fileName: doc.fileName,
+      fileSize: doc.fileSize,
+      taggedUsers: doc.taggedUsers,
+      uploadedFileName: doc.uploadedFileName,
+      uploadedFileSize: doc.uploadedFileSize,
+      uploadedFileMimeType: doc.uploadedFileMimeType,
+      createdAt: doc.createdAt,
+      documentType: 'procurement', // Flag to identify procurement documents
+    }));
+
+    // Also fetch requisition documents from all requisitions for this order
+    const requisitionRepository = getDataSource().getRepository(RequisitionEntity);
+    const requisitions = await requisitionRepository.find({
+      where: { orderId },
+    });
+
+    const requisitionDocRepository = getDataSource().getRepository(RequisitionDocumentEntity);
+    const requisitionDocuments: any[] = [];
+
+    for (const requisition of requisitions) {
+      const reqDocs = await requisitionDocRepository.find({
+        where: { requisitionId: requisition.id },
+        order: { uploadedAt: 'DESC' },
+      });
+
+      // Add requisition documents with metadata
+      requisitionDocuments.push(...reqDocs.map(doc => ({
+        id: doc.id,
+        requisitionId: doc.requisitionId,
+        orderId: orderId, // Add orderId for consistency
+        uploadedBy: doc.uploadedBy,
+        uploadedByName: doc.uploadedByName,
+        uploadedBySurname: doc.uploadedBySurname,
+        uploadedByEmail: doc.uploadedByEmail,
+        fileName: doc.fileName,
+        fileSize: doc.fileSize,
+        mimeType: doc.mimeType,
+        description: doc.description,
+        uploadedAt: doc.uploadedAt,
+        createdAt: doc.uploadedAt, // Use uploadedAt as createdAt for consistency
+        documentType: 'requisition', // Flag to identify requisition documents
+        // Use description (label) as itemName if available, otherwise use fileName
+        itemName: doc.description || doc.fileName,
+        itemCode: 'N/A', // Requisition documents don't have item codes
+        itemDescription: doc.description || doc.fileName,
+        quantity: 1, // Default quantity
+      })));
+    }
+
+    // Combine both types of documents and sort by creation date
+    const allDocuments = [...documentsMetadata, ...requisitionDocuments].sort((a, b) => {
+      const dateA = new Date(a.createdAt || a.uploadedAt).getTime();
+      const dateB = new Date(b.createdAt || b.uploadedAt).getTime();
+      return dateB - dateA; // Most recent first
+    });
+
+    res.json(allDocuments);
+  } catch (error) {
+    console.error('Failed to fetch procurement documents:', error);
+    res.status(500).json({ error: 'Failed to fetch procurement documents' });
+  }
+});
+
+// Download a saved procurement document (the generated requisition PDF)
+router.get('/procurement-documents/:documentId/download', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { documentId } = req.params;
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const procurementDocRepository = getDataSource().getRepository(ProcurementDocumentEntity);
+    const document = await procurementDocRepository.findOne({ where: { id: documentId } });
+
+    if (!document) {
+      return res.status(404).json({ error: 'Procurement document not found' });
+    }
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(document.fileName)}"`);
+    res.send(document.pdfData);
+  } catch (error) {
+    console.error('Failed to download procurement document:', error);
+    res.status(500).json({ error: 'Failed to download procurement document' });
+  }
+});
+
+// Download the uploaded document for a procurement document
+router.get('/procurement-documents/:documentId/download-uploaded', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { documentId } = req.params;
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const procurementDocRepository = getDataSource().getRepository(ProcurementDocumentEntity);
+    const document = await procurementDocRepository.findOne({ where: { id: documentId } });
+
+    if (!document) {
+      return res.status(404).json({ error: 'Procurement document not found' });
+    }
+
+    if (!document.uploadedFileData || !document.uploadedFileName) {
+      return res.status(404).json({ error: 'No uploaded file found for this procurement document' });
+    }
+
+    const mimeType = document.uploadedFileMimeType || 'application/octet-stream';
+    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(document.uploadedFileName)}"`);
+    res.send(document.uploadedFileData);
+  } catch (error) {
+    console.error('Failed to download uploaded document:', error);
+    res.status(500).json({ error: 'Failed to download uploaded document' });
+  }
+});
+
+// Get all documents for a requisition
+router.get('/:id/documents', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const requisitionRepository = getDataSource().getRepository(RequisitionEntity);
+    const requisition = await requisitionRepository.findOne({ where: { id } });
+
+    if (!requisition) {
+      return res.status(404).json({ error: 'Requisition not found' });
+    }
+
+    // Check access - user must be requester, approver, or have access to the order
+    const hasAccess = requisition.requestedBy === userId ||
+      (requisition.approverIds && (
+        Array.isArray(requisition.approverIds) 
+          ? requisition.approverIds.includes(userId)
+          : (requisition.approverIds as string).split(',').includes(userId)
+      ));
+
+    if (!hasAccess) {
+      const orderRepository = getDataSource().getRepository(OrderEntity);
+      const order = await orderRepository.findOne({ where: { id: requisition.orderId } });
+      if (order) {
+        const { ProjectService } = await import('../../services/projectService');
+        const projectService = new ProjectService();
+        const user = await getDataSource().getRepository(UserEntity).findOne({ where: { id: userId } });
+        if (user) {
+          const canAccess = await projectService.canUserAccessOrder(
+            userId,
+            user.role,
+            user.departmentId,
+            requisition.orderId
+          );
+          if (!canAccess) {
+            return res.status(403).json({ error: 'Access denied' });
+          }
+        } else {
+          return res.status(403).json({ error: 'Access denied' });
+        }
+      } else {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+    }
+
+    const requisitionDocRepository = getDataSource().getRepository(RequisitionDocumentEntity);
+    const documents = await requisitionDocRepository.find({
+      where: { requisitionId: id },
+      order: { uploadedAt: 'DESC' },
+    });
+
+    // Return metadata without file data
+    const documentsMetadata = documents.map(doc => ({
+      id: doc.id,
+      requisitionId: doc.requisitionId,
+      uploadedBy: doc.uploadedBy,
+      uploadedByName: doc.uploadedByName,
+      uploadedBySurname: doc.uploadedBySurname,
+      fileName: doc.fileName,
+      fileSize: doc.fileSize,
+      mimeType: doc.mimeType,
+      description: doc.description,
+      uploadedAt: doc.uploadedAt,
+    }));
+
+    res.json(documentsMetadata);
+  } catch (error) {
+    console.error('Failed to fetch requisition documents:', error);
+    res.status(500).json({ error: 'Failed to fetch requisition documents' });
+  }
+});
+
+// Download a requisition document
+router.get('/documents/:documentId/download', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { documentId } = req.params;
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const requisitionDocRepository = getDataSource().getRepository(RequisitionDocumentEntity);
+    const document = await requisitionDocRepository.findOne({ where: { id: documentId } });
+
+    if (!document) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+
+    // Check access
+    const requisitionRepository = getDataSource().getRepository(RequisitionEntity);
+    const requisition = await requisitionRepository.findOne({ where: { id: document.requisitionId } });
+
+    if (!requisition) {
+      return res.status(404).json({ error: 'Requisition not found' });
+    }
+
+    const hasAccess = requisition.requestedBy === userId ||
+      (requisition.approverIds && (
+        Array.isArray(requisition.approverIds) 
+          ? requisition.approverIds.includes(userId)
+          : (requisition.approverIds as string).split(',').includes(userId)
+      ));
+
+    if (!hasAccess) {
+      const orderRepository = getDataSource().getRepository(OrderEntity);
+      const order = await orderRepository.findOne({ where: { id: requisition.orderId } });
+      if (order) {
+        const { ProjectService } = await import('../../services/projectService');
+        const projectService = new ProjectService();
+        const user = await getDataSource().getRepository(UserEntity).findOne({ where: { id: userId } });
+        if (user) {
+          const canAccess = await projectService.canUserAccessOrder(
+            userId,
+            user.role,
+            user.departmentId,
+            requisition.orderId
+          );
+          if (!canAccess) {
+            return res.status(403).json({ error: 'Access denied' });
+          }
+        } else {
+          return res.status(403).json({ error: 'Access denied' });
+        }
+      } else {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+    }
+
+    res.setHeader('Content-Type', document.mimeType || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(document.fileName)}"`);
+    res.send(document.fileData);
+  } catch (error) {
+    console.error('Failed to download requisition document:', error);
+    res.status(500).json({ error: 'Failed to download requisition document' });
   }
 });
 

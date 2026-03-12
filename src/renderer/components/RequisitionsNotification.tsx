@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { API_BASE_URL } from '../config';
 import { useAuth } from '../context/AuthContext';
@@ -158,32 +159,90 @@ const RequisitionsNotification: React.FC = () => {
     <div className="invitations-notification">
       <button
         className="invitations-bell"
-        onClick={() => setShowNotifications(!showNotifications)}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          console.log('RequisitionsNotification clicked, current state:', showNotifications, 'toggling to:', !showNotifications);
+          setShowNotifications(!showNotifications);
+        }}
         title={`${requisitions.length} pending requisition${requisitions.length > 1 ? 's' : ''}`}
       >
         📋
         {requisitions.length > 0 && <span className="invitations-badge">{requisitions.length}</span>}
       </button>
 
-      {showNotifications && (
+      {showNotifications && requisitions.length > 0 && typeof document !== 'undefined' && document.body && createPortal(
         <>
-          <div className="invitations-overlay" onClick={() => setShowNotifications(false)}></div>
-          <div className="invitations-dropdown">
-            <div className="invitations-header">
-              <h3>Requisition Approvals ({requisitions.length})</h3>
-              <button onClick={() => setShowNotifications(false)} className="close-btn">×</button>
+          {console.log('Rendering RequisitionsNotification dropdown via Portal, requisitions:', requisitions.length)}
+          <div 
+            className="invitations-overlay" 
+            onClick={() => {
+              console.log('Overlay clicked, closing notifications');
+              setShowNotifications(false);
+            }}
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 999998,
+              background: 'rgba(0, 0, 0, 0.5)',
+              backdropFilter: 'blur(2px)',
+              WebkitBackdropFilter: 'blur(2px)',
+              pointerEvents: 'auto'
+            }}
+          ></div>
+          <div 
+            className="invitations-dropdown invitations-modal"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: 'fixed',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              bottom: 'auto',
+              right: 'auto',
+              zIndex: 999999,
+              visibility: 'visible',
+              opacity: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              width: '400px',
+              maxHeight: 'calc(100vh - 100px)',
+              minHeight: 'auto',
+              padding: 0,
+              background: '#1B2A41',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: '12px',
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.8)',
+              overflow: 'hidden',
+              pointerEvents: 'auto',
+              color: '#f1f5f9',
+              fontFamily: 'inherit'
+            }}
+          >
+            <div className="invitations-header" style={{ padding: '1rem', flexShrink: 0 }}>
+              <h3 style={{ fontSize: '1rem', margin: 0, fontWeight: 600, color: '#f1f5f9' }}>Requisition Approvals ({requisitions.length})</h3>
+              <button onClick={() => setShowNotifications(false)} className="close-btn" style={{ fontSize: '1.5rem' }}>×</button>
             </div>
-            <div className="invitations-list">
+            <div className="invitations-list" style={{ maxHeight: 'calc(100vh - 200px)', overflowY: 'auto', padding: 0, flex: 1 }}>
               {requisitions.map((requisition) => (
-                <div key={requisition.id} className="invitation-item">
-                  <div className="invitation-info">
-                    <strong>
-                      {requisition.requester?.name} {requisition.requester?.surname}
-                    </strong>
-                    {' requested approval for requisition '}
-                    <strong>Project {requisition.order?.orderNumber || requisition.orderId}</strong>
+                <div key={requisition.id} className="invitation-item" style={{ padding: '1rem', borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                  <div className="invitation-info" style={{ marginBottom: '0.75rem' }}>
+                    <p style={{ margin: '0 0 0.5rem 0', color: '#f1f5f9', lineHeight: '1.5', fontSize: '0.875rem' }}>
+                      <strong style={{ color: '#3498DB' }}>
+                        {requisition.requester?.name} {requisition.requester?.surname}
+                      </strong>
+                      {' requested approval'}
+                    </p>
+                    {requisition.order?.orderNumber && (
+                      <p style={{ margin: '0.25rem 0', color: '#f1f5f9', fontSize: '0.875rem', fontWeight: 500 }}>
+                        {requisition.order.orderNumber}
+                      </p>
+                    )}
                     {requisition.order?.customerName && (
-                      <p style={{ margin: '0.25rem 0', color: '#94a3b8' }}>
+                      <p style={{ margin: '0.25rem 0', color: '#94a3b8', fontSize: '0.875rem' }}>
                         Project: {requisition.order.customerName}
                       </p>
                     )}
@@ -193,7 +252,7 @@ const RequisitionsNotification: React.FC = () => {
                       </p>
                     )}
                     {requisition.notes && (
-                      <p className="invitation-message" style={{ marginTop: '0.5rem' }}>
+                      <p className="invitation-message" style={{ marginTop: '0.5rem', fontSize: '0.875rem', padding: '0.5rem', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '6px' }}>
                         {requisition.notes}
                       </p>
                     )}
@@ -202,21 +261,24 @@ const RequisitionsNotification: React.FC = () => {
                         to={`/orders/${requisition.orderId}`}
                         onClick={() => setShowNotifications(false)}
                         className="invitation-link"
+                        style={{ marginTop: '0.5rem', display: 'inline-block', fontSize: '0.875rem' }}
                       >
                         View Project →
                       </Link>
                     )}
                   </div>
-                  <div className="invitation-actions">
+                  <div className="invitation-actions" style={{ marginTop: '0.75rem', flexShrink: 0 }}>
                     <button
                       onClick={() => setShowApproveModal(requisition.id)}
                       className="btn-accept"
+                      style={{ padding: '0.5rem 1rem', fontSize: '0.875rem' }}
                     >
                       Approve
                     </button>
                     <button
                       onClick={() => setShowRejectModal(requisition.id)}
                       className="btn-reject"
+                      style={{ padding: '0.5rem 1rem', fontSize: '0.875rem' }}
                     >
                       Reject
                     </button>
@@ -225,17 +287,61 @@ const RequisitionsNotification: React.FC = () => {
               ))}
             </div>
           </div>
-        </>
+        </>,
+        document.body
       )}
 
-      {showApproveModal && (
+      {showApproveModal && typeof document !== 'undefined' && document.body && createPortal(
         <>
-          <div className="invitations-overlay" onClick={() => {
-            setShowApproveModal(null);
-            setProofFile({ ...proofFile, [showApproveModal]: null });
-            setProofDescription({ ...proofDescription, [showApproveModal]: '' });
-          }}></div>
-          <div className="invitations-dropdown" style={{ maxWidth: '500px', padding: '1rem' }}>
+          <div 
+            className="invitations-overlay" 
+            onClick={() => {
+              setShowApproveModal(null);
+              setProofFile({ ...proofFile, [showApproveModal]: null });
+              setProofDescription({ ...proofDescription, [showApproveModal]: '' });
+            }}
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 999998,
+              background: 'rgba(0, 0, 0, 0.5)',
+              backdropFilter: 'blur(2px)',
+              WebkitBackdropFilter: 'blur(2px)',
+              pointerEvents: 'auto'
+            }}
+          ></div>
+          <div 
+            className="invitations-dropdown invitations-modal" 
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: 'fixed',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              bottom: 'auto',
+              right: 'auto',
+              zIndex: 999999,
+              visibility: 'visible',
+              opacity: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              width: '500px',
+              maxHeight: 'calc(100vh - 100px)',
+              minHeight: 'auto',
+              padding: '1rem',
+              background: '#1B2A41',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: '12px',
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.8)',
+              overflow: 'hidden',
+              pointerEvents: 'auto',
+              color: '#f1f5f9',
+              fontFamily: 'inherit'
+            }}
+          >
             <div className="invitations-header">
               <h3>Approve Requisition</h3>
               <button 
@@ -325,16 +431,60 @@ const RequisitionsNotification: React.FC = () => {
               </div>
             </div>
           </div>
-        </>
+        </>,
+        document.body
       )}
 
-      {showRejectModal && (
+      {showRejectModal && typeof document !== 'undefined' && document.body && createPortal(
         <>
-          <div className="invitations-overlay" onClick={() => {
-            setShowRejectModal(null);
-            setRejectionReason({ ...rejectionReason, [showRejectModal]: '' });
-          }}></div>
-          <div className="invitations-dropdown" style={{ maxWidth: '400px', padding: '1rem' }}>
+          <div 
+            className="invitations-overlay" 
+            onClick={() => {
+              setShowRejectModal(null);
+              setRejectionReason({ ...rejectionReason, [showRejectModal]: '' });
+            }}
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 999998,
+              background: 'rgba(0, 0, 0, 0.5)',
+              backdropFilter: 'blur(2px)',
+              WebkitBackdropFilter: 'blur(2px)',
+              pointerEvents: 'auto'
+            }}
+          ></div>
+          <div 
+            className="invitations-dropdown invitations-modal" 
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: 'fixed',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              bottom: 'auto',
+              right: 'auto',
+              zIndex: 999999,
+              visibility: 'visible',
+              opacity: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              width: '400px',
+              maxHeight: 'calc(100vh - 100px)',
+              minHeight: 'auto',
+              padding: '1rem',
+              background: '#1B2A41',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: '12px',
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.8)',
+              overflow: 'hidden',
+              pointerEvents: 'auto',
+              color: '#f1f5f9',
+              fontFamily: 'inherit'
+            }}
+          >
             <div className="invitations-header">
               <h3>Reject Requisition</h3>
               <button 
@@ -391,7 +541,8 @@ const RequisitionsNotification: React.FC = () => {
               </div>
             </div>
           </div>
-        </>
+        </>,
+        document.body
       )}
     </div>
   );

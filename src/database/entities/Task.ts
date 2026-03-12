@@ -51,6 +51,15 @@ export class TaskEntity {
   @Column('uuid', { nullable: true })
   assignedUserId?: string;
 
+  @Column({ nullable: true })
+  assignedUserName?: string; // Name of assigned user
+
+  @Column({ nullable: true })
+  assignedUserSurname?: string; // Surname of assigned user
+
+  @Column({ nullable: true })
+  assignedUserEmail?: string; // Email of assigned user
+
   @Column('simple-array', { default: '', nullable: true })
   resourceIds?: string[];
 

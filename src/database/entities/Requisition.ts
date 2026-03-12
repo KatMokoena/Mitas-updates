@@ -27,14 +27,32 @@ export class RequisitionEntity {
   @Column('uuid')
   requestedBy!: string; // User ID who created the requisition
 
+  @Column({ nullable: true })
+  requestedByName?: string; // Name of user who created the requisition
+
+  @Column({ nullable: true })
+  requestedBySurname?: string; // Surname of user who created the requisition
+
+  @Column({ nullable: true })
+  requestedByEmail?: string; // Email of user who created the requisition
+
   @Column('simple-array', { nullable: true })
   approverIds?: string[]; // User IDs who need to approve (multiple approvers)
+
+  @Column('text', { nullable: true })
+  approverNames?: string; // JSON string of approver names, surnames, emails
 
   @Column('simple-array', { nullable: true })
   approvedByIds?: string[]; // User IDs who have approved
 
+  @Column('text', { nullable: true })
+  approvedByNames?: string; // JSON string of approver names, surnames, emails
+
   @Column('simple-array', { nullable: true })
   rejectedByIds?: string[]; // User IDs who have rejected
+
+  @Column('text', { nullable: true })
+  rejectedByNames?: string; // JSON string of rejector names, surnames, emails
 
   @Column({
     type: 'text',

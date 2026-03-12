@@ -27,6 +27,18 @@ export class ProjectEntity {
   @Column('uuid', { nullable: true })
   departmentId?: string;
 
+  @Column('uuid', { nullable: true })
+  ownerId?: string; // User ID who owns/created the project
+
+  @Column({ nullable: true })
+  ownerName?: string; // Name of project owner
+
+  @Column({ nullable: true })
+  ownerSurname?: string; // Surname of project owner
+
+  @Column({ nullable: true })
+  ownerEmail?: string; // Email of project owner
+
   @Column({ type: 'datetime', nullable: true })
   startDate?: Date;
 

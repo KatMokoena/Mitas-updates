@@ -111,25 +111,54 @@ export class SchedulingEngine {
 
     // Determine order status
     const now = new Date();
-    const daysUntilDeadline = this.daysBetween(now, order.deadline);
+    
+    // If order is completed, calculate days based on completion date
+    let daysUntilDeadline: number;
+    if (order.status === OrderStatus.COMPLETED && order.completedDate) {
+      // Calculate days between completion date and deadline
+      const completionDate = new Date(order.completedDate);
+      daysUntilDeadline = this.daysBetween(completionDate, order.deadline);
+      // If completed before deadline, this will be positive (days before)
+      // If completed after deadline, this will be negative (days after)
+    } else {
+      // For active projects, calculate days until deadline (don't go negative)
+      const days = this.daysBetween(now, order.deadline);
+      daysUntilDeadline = Math.max(0, days); // Stop at 0 when deadline is reached
+    }
+    
     const daysUntilProjectedCompletion = this.daysBetween(now, projectedCompletionDate);
 
     let status: 'on_track' | 'at_risk' | 'late' = 'on_track';
-    // Calculate the difference between projected completion and deadline
-    const daysDifference = this.daysBetween(projectedCompletionDate, order.deadline);
     
-    if (projectedCompletionDate > order.deadline) {
-      // Projected completion is after deadline - definitely late
-      status = 'late';
-    } else if (daysDifference < 7 && daysDifference >= 0) {
-      // Less than 7 days buffer but still on time - at risk
-      status = 'at_risk';
-    } else if (daysUntilDeadline < 0) {
-      // Deadline has already passed
-      status = 'late';
+    // If completed, status is based on when it was completed relative to deadline
+    if (order.status === OrderStatus.COMPLETED) {
+      if (order.completedDate) {
+        const completionDate = new Date(order.completedDate);
+        if (completionDate <= order.deadline) {
+          status = 'on_track'; // Completed on time or early
+        } else {
+          status = 'late'; // Completed after deadline
+        }
+      } else {
+        status = 'on_track'; // Default for completed without date
+      }
     } else {
-      // More than 7 days buffer - on track
-      status = 'on_track';
+      // Calculate the difference between projected completion and deadline
+      const daysDifference = this.daysBetween(projectedCompletionDate, order.deadline);
+      
+      if (projectedCompletionDate > order.deadline) {
+        // Projected completion is after deadline - definitely late
+        status = 'late';
+      } else if (daysDifference < 7 && daysDifference >= 0) {
+        // Less than 7 days buffer but still on time - at risk
+        status = 'at_risk';
+      } else if (daysUntilDeadline === 0 && now > order.deadline) {
+        // Deadline has been reached (but not completed)
+        status = 'at_risk'; // Changed from 'late' - don't mark as late when deadline is reached
+      } else {
+        // More than 7 days buffer - on track
+        status = 'on_track';
+      }
     }
 
     // Automatically update order status based on tasks and deadline
@@ -333,7 +362,10 @@ export class SchedulingEngine {
    * Automatically updates order status based on:
    * - PENDING if no tasks have been added
    * - ACTIVE if tasks are added
-   * - COMPLETED if the deadline has passed
+   * - COMPLETED if the deadline has passed OR all tasks are completed
+   * 
+   * NOTE: If order is manually marked as COMPLETED (has completedDate), 
+   * the status will NOT be auto-updated - it remains COMPLETED permanently.
    */
   private async updateOrderStatus(
     order: OrderEntity,
@@ -348,6 +380,11 @@ export class SchedulingEngine {
       return;
     }
 
+    // If order is manually marked as COMPLETED (has completedDate), never overwrite it
+    if (order.status === OrderStatus.COMPLETED && order.completedDate) {
+      return; // Keep it as COMPLETED - this is a manual completion
+    }
+
     let newStatus: OrderStatus = order.status;
 
     // Check if all tasks are completed
@@ -356,15 +393,9 @@ export class SchedulingEngine {
     // If deadline has passed OR all tasks are completed, mark as COMPLETED
     if (deadline < now || allTasksCompleted) {
       newStatus = OrderStatus.COMPLETED;
-    }
-    // If deadline is in the future and order was COMPLETED, change back to appropriate status
-    else if (deadline >= now && order.status === OrderStatus.COMPLETED) {
-      // If tasks exist, mark as ACTIVE
-      if (tasks.length > 0) {
-        newStatus = OrderStatus.ACTIVE;
-      } else {
-        // If no tasks, mark as PENDING
-        newStatus = OrderStatus.PENDING;
+      // Set completedDate if not already set (for automatic completion)
+      if (!order.completedDate) {
+        order.completedDate = now;
       }
     }
     // If tasks exist, mark as ACTIVE (unless already COMPLETED)

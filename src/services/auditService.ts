@@ -1,5 +1,6 @@
 import { getDataSource } from '../database/config';
 import { AuditLogEntity, AuditAction, AuditEntityType } from '../database/entities/AuditLog';
+import { UserEntity } from '../database/entities/User';
 import { v4 as uuidv4 } from 'uuid';
 
 export class AuditService {
@@ -23,12 +24,26 @@ export class AuditService {
   ): Promise<void> {
     try {
       const auditRepository = getDataSource().getRepository(AuditLogEntity);
+      
+      // Get user info if userId is provided
+      let userInfo = {};
+      if (options.userId) {
+        const userRepository = getDataSource().getRepository(UserEntity);
+        const user = await userRepository.findOne({ where: { id: options.userId } });
+        if (user) {
+          userInfo = {
+            userName: user.name || null,
+            userSurname: user.surname || null,
+            userEmail: user.email || null,
+          };
+        }
+      }
 
       const auditLog = auditRepository.create({
-        id: uuidv4(),
         action,
         entityType,
         userId: options.userId,
+        ...userInfo,
         entityId: options.entityId,
         entityName: options.entityName,
         description: options.description,
@@ -38,7 +53,7 @@ export class AuditService {
         newValues: options.newValues ? JSON.stringify(options.newValues) : undefined,
         metadata: options.metadata ? JSON.stringify(options.metadata) : undefined,
       });
-
+      auditLog.id = uuidv4();
       await auditRepository.save(auditLog);
     } catch (error) {
       console.error('Failed to log audit event:', error);
@@ -82,6 +97,8 @@ export class AuditService {
     }
   }
 }
+
+
 
 
 

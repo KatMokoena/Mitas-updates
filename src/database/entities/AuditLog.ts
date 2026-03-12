@@ -11,6 +11,7 @@ export enum AuditAction {
   LOGOUT = 'logout',
   EXPORT = 'export',
   IMPORT = 'import',
+  TRANSFER = 'transfer',
 }
 
 export enum AuditEntityType {
@@ -32,6 +33,15 @@ export class AuditLogEntity {
 
   @Column('uuid', { nullable: true })
   userId?: string; // User who performed the action
+
+  @Column({ nullable: true })
+  userName?: string; // Name of user who performed the action
+
+  @Column({ nullable: true })
+  userSurname?: string; // Surname of user who performed the action
+
+  @Column({ nullable: true })
+  userEmail?: string; // Email of user who performed the action
 
   @Column('text')
   action!: AuditAction; // Action performed

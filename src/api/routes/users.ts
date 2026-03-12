@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { AuthenticatedRequest, authMiddleware } from '../middleware/auth';
+import { AuthenticatedRequest, authMiddleware, destroyUserSessions } from '../middleware/auth';
 import { getDataSource } from '../../database/config';
 import { UserEntity } from '../../database/entities/User';
 import { PermissionService } from '../../auth/permissions';
@@ -67,6 +67,7 @@ router.put('/:id', async (req: AuthenticatedRequest, res: Response) => {
       return;
     }
 
+    // Update user fields
     if (req.body.role) {
       user.role = req.body.role;
     }
@@ -83,7 +84,51 @@ router.put('/:id', async (req: AuthenticatedRequest, res: Response) => {
       user.departmentId = req.body.departmentId || null;
     }
 
+    // Handle password update if provided
+    if (req.body.password && req.body.password.trim() !== '') {
+      const passwordResult = await authService.updatePassword(user.id, req.body.password);
+      if (!passwordResult.success) {
+        res.status(400).json({ error: passwordResult.error || 'Failed to update password' });
+        return;
+      }
+      // Reload user after password update to get the updated passwordHash
+      // This prevents the save below from overwriting the password change
+      const userAfterPasswordUpdate = await userRepository.findOne({ where: { id: user.id } });
+      if (userAfterPasswordUpdate) {
+        // Copy updated fields to the reloaded user
+        if (req.body.role) {
+          userAfterPasswordUpdate.role = req.body.role;
+        }
+        if (req.body.email) {
+          userAfterPasswordUpdate.email = req.body.email;
+        }
+        if (req.body.name) {
+          userAfterPasswordUpdate.name = req.body.name;
+        }
+        if (req.body.surname) {
+          userAfterPasswordUpdate.surname = req.body.surname;
+        }
+        if (req.body.departmentId !== undefined) {
+          userAfterPasswordUpdate.departmentId = req.body.departmentId || null;
+        }
+        // Save the reloaded user with all updates
+        await userRepository.save(userAfterPasswordUpdate);
+        
+        res.json({
+          id: userAfterPasswordUpdate.id,
+          name: userAfterPasswordUpdate.name,
+          surname: userAfterPasswordUpdate.surname,
+          email: userAfterPasswordUpdate.email,
+          role: userAfterPasswordUpdate.role,
+          departmentId: userAfterPasswordUpdate.departmentId,
+        });
+        return;
+      }
+    }
+
+    // Save user (no password update)
     await userRepository.save(user);
+    
     res.json({
       id: user.id,
       name: user.name,
@@ -143,6 +188,9 @@ router.delete('/:id', async (req: AuthenticatedRequest, res: Response) => {
         res.status(500).json({ error: 'Failed to delete user - user still exists' });
         return;
       }
+      
+      // Invalidate all sessions for this user
+      destroyUserSessions(req.params.id);
       
       console.log(`User permanently deleted: ${user.email} (ID: ${req.params.id})`);
       res.status(204).send();

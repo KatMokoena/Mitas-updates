@@ -139,9 +139,22 @@ router.post('/', async (req: AuthenticatedRequest, res: Response) => {
     const existingStrengths = await strengthsRepository.findOne({ where: { userId: user.id } });
 
     if (existingStrengths) {
+      // Get user info for update
+      const currentUser = await userRepository.findOne({ where: { id: req.user!.id } });
+      const profileUser = await userRepository.findOne({ where: { id: user.id } });
+      
       // Update existing
       existingStrengths.topStrengths = topStrengths;
       existingStrengths.updatedBy = req.user!.id;
+      existingStrengths.updatedByName = currentUser?.name || undefined;
+      existingStrengths.updatedBySurname = currentUser?.surname || undefined;
+      existingStrengths.updatedByEmail = currentUser?.email || undefined;
+      // Also update user info if it changed
+      if (profileUser) {
+        existingStrengths.userName = profileUser.name || undefined;
+        existingStrengths.userSurname = profileUser.surname || undefined;
+        existingStrengths.userEmail = profileUser.email || undefined;
+      }
       await strengthsRepository.save(existingStrengths);
 
       // Log audit
@@ -155,14 +168,26 @@ router.post('/', async (req: AuthenticatedRequest, res: Response) => {
 
       res.json(existingStrengths);
     } else {
+      // Get user info for creation
+      const currentUser = await userRepository.findOne({ where: { id: req.user!.id } });
+      
       // Create new
       const newStrengths = strengthsRepository.create({
-        id: uuidv4(),
         userId: user.id,
+        userName: user.name || undefined,
+        userSurname: user.surname || undefined,
+        userEmail: user.email || undefined,
         topStrengths,
         createdBy: req.user!.id,
+        createdByName: currentUser?.name || undefined,
+        createdBySurname: currentUser?.surname || undefined,
+        createdByEmail: currentUser?.email || undefined,
         updatedBy: req.user!.id,
+        updatedByName: currentUser?.name || undefined,
+        updatedBySurname: currentUser?.surname || undefined,
+        updatedByEmail: currentUser?.email || undefined,
       });
+      newStrengths.id = uuidv4();
 
       await strengthsRepository.save(newStrengths);
 
@@ -286,4 +311,6 @@ router.get('/team-synergy', async (req: AuthenticatedRequest, res: Response) => 
 });
 
 export default router;
+
+
 

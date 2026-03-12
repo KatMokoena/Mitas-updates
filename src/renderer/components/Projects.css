@@ -180,6 +180,44 @@
   box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4);
 }
 
+.btn-transfer {
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+  color: white;
+  border: none;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-base);
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
+}
+
+.btn-transfer:hover {
+  background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+}
+
+.owner-badge {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 4px 10px;
+  background: var(--panel-bg);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.owner-badge.owner-indicator {
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.2) 0%, rgba(245, 158, 11, 0.2) 100%);
+  border-color: rgba(251, 191, 36, 0.4);
+  color: #fbbf24;
+  font-weight: 600;
+}
+
 /* Modal */
 .modal-overlay {
   position: fixed;

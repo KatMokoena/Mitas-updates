@@ -50,8 +50,20 @@ export class OrderEntity {
   @Column('uuid', { nullable: true })
   createdBy?: string; // User ID who created the order
 
+  @Column({ nullable: true })
+  createdByName?: string; // Name of user who created the order
+
+  @Column({ nullable: true })
+  createdBySurname?: string; // Surname of user who created the order
+
+  @Column({ nullable: true })
+  createdByEmail?: string; // Email of user who created the order
+
   @Column('simple-array', { default: '', nullable: true })
   equipmentIds?: string[];
+
+  @Column({ type: 'datetime', nullable: true })
+  completedDate?: Date;
 
   @CreateDateColumn()
   createdAt!: Date;

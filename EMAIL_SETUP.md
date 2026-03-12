@@ -16,6 +16,7 @@ SMTP_USER=yourname@mitascorp.co.za # Your Outlook email address
 SMTP_PASSWORD=your-password       # Your Outlook password or app password (if MFA enabled)
 EMAIL_FROM=yourname@mitascorp.co.za # Email address to send from
 EMAIL_TO=recipient@example.com     # Email address(es) to send to (comma-separated for multiple)
+EMAIL_SCHEDULE_TIME=18:55          # Time to send daily emails (24-hour format: HH:MM, default: 18:55)
 ```
 
 **Example for Outlook/Office 365:**
@@ -27,6 +28,7 @@ SMTP_USER=yourname@mitascorp.co.za
 SMTP_PASSWORD=your-password
 EMAIL_FROM=yourname@mitascorp.co.za
 EMAIL_TO=manager@mitascorp.co.za,team@mitascorp.co.za
+EMAIL_SCHEDULE_TIME=08:00          # Send emails at 8:00 AM daily
 ```
 
 **Note for Outlook/Office 365:**
@@ -69,7 +71,7 @@ POST /api/email/test
 
 ## How It Works
 
-1. **Scheduler**: The system uses `node-cron` to schedule daily emails at 8:00 AM (Africa/Johannesburg timezone).
+1. **Scheduler**: The system uses `node-cron` to schedule daily emails at the time specified in `EMAIL_SCHEDULE_TIME` (default: 18:55 / 6:55 PM) in the Africa/Johannesburg timezone.
 
 2. **PDF Generation**: For each order in the system, a PDF report is generated with:
    - Order information
@@ -118,24 +120,21 @@ To manually trigger the daily reports for testing, you can call the scheduler se
 - Verify the server logs for initialization messages
 - The scheduler only starts if email configuration is valid
 
-## Timezone
+## Schedule Time Configuration
 
-The scheduler runs at 8:00 AM in the `Africa/Johannesburg` timezone. To change this, modify the timezone in `src/services/schedulerService.ts`:
+The daily email send time can be configured via the `EMAIL_SCHEDULE_TIME` environment variable:
 
-```typescript
-timezone: 'Africa/Johannesburg', // Change to your desired timezone
-```
+**Format**: `HH:MM` (24-hour format)
 
-## Cron Expression
+**Examples**:
+- `EMAIL_SCHEDULE_TIME=08:00` - Send at 8:00 AM
+- `EMAIL_SCHEDULE_TIME=18:55` - Send at 6:55 PM (default)
+- `EMAIL_SCHEDULE_TIME=12:30` - Send at 12:30 PM
+- `EMAIL_SCHEDULE_TIME=00:00` - Send at midnight
 
-The current cron expression is `0 8 * * *` which means:
-- `0` - At minute 0
-- `8` - At hour 8 (8 AM)
-- `*` - Every day of the month
-- `*` - Every month
-- `*` - Every day of the week
+**Default**: If not specified, emails are sent at 18:55 (6:55 PM)
 
-To change the schedule, modify the cron expression in `src/services/schedulerService.ts`.
+**Note**: The time is in the `Africa/Johannesburg` timezone. To change the timezone, modify the timezone setting in `src/services/schedulerService.ts`.
 
 ## Security Notes
 

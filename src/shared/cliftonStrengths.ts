@@ -216,3 +216,5 @@ export const STRENGTH_DETAILS: Record<string, { category: string; description: s
   },
 };
 
+
+

@@ -1,0 +1,23 @@
+﻿{
+  "github": {
+    "owner": "KatMokoena",
+    "ownerType": "user",
+    "tokenEnv": "GITHUB_TOKEN"
+  },
+  "defaults": {
+    "branch": "Main",
+    "visibility": "public",
+    "enablePages": false,
+    "commitMessage": "Automated update"
+  },
+  "projects": [
+    {
+      "name": "IPMP",
+      "localPath": "C:/SelfBuilds/Mitas Internal Project Management Platform (IPMP)/ipmp to VM/ipmp",
+      "repo": "Mitas-updates",
+      "branch": "Main",
+      "enablePages": false,
+      "commitMessage": "Automated IPMP update"
+    }
+  ]
+}

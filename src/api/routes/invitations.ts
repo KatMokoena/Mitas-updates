@@ -4,7 +4,17 @@ import { getDataSource } from '../../database/config';
 import { TaskInvitationEntity, InvitationStatus } from '../../database/entities/TaskInvitation';
 import { TaskEntity } from '../../database/entities/Task';
 import { UserEntity } from '../../database/entities/User';
+import { OrderEntity } from '../../database/entities/Order';
+import { EmailService } from '../../services/emailService';
+import { setEmailService } from './email';
 import { v4 as uuidv4 } from 'uuid';
+
+let emailServiceInstance: EmailService | null = null;
+
+// Allow email service to be set from server.ts
+export function setInvitationsEmailService(service: EmailService): void {
+  emailServiceInstance = service;
+}
 
 const router = Router();
 
@@ -133,20 +143,56 @@ router.post('/', async (req: AuthenticatedRequest, res: Response) => {
       return;
     }
 
+    // Get inviter info
+    const inviter = await userRepository.findOne({ where: { id: req.user!.id } });
+    
     // Create invitation
     const invitation = invitationRepository.create({
-      id: uuidv4(),
       taskId,
       inviterId: req.user!.id,
+      inviterName: inviter?.name || undefined,
+      inviterSurname: inviter?.surname || undefined,
+      inviterEmail: inviter?.email || undefined,
       inviteeId: invitee.id,
+      inviteeName: invitee.name || undefined,
+      inviteeSurname: invitee.surname || undefined,
+      inviteeEmail: invitee.email || undefined,
       status: InvitationStatus.PENDING,
-      message: message || null,
+      message: message || undefined,
     });
+    invitation.id = uuidv4();
 
     await invitationRepository.save(invitation);
 
+    // Send email notification
+    if (emailServiceInstance && invitee.email) {
+      try {
+        const inviterName = inviter ? `${inviter.name} ${inviter.surname}` : 'A team member';
+        const inviteeName = `${invitee.name} ${invitee.surname}`;
+        
+        // Get order number if task has an orderId
+        let orderNumber: string | undefined;
+        if (task.orderId) {
+          const orderRepository = getDataSource().getRepository(OrderEntity);
+          const order = await orderRepository.findOne({ where: { id: task.orderId } });
+          orderNumber = order?.orderNumber;
+        }
+
+        await emailServiceInstance.sendTaskInvitationEmail(
+          invitee.email,
+          inviteeName,
+          inviterName,
+          task.title,
+          orderNumber,
+          message || undefined
+        );
+      } catch (emailError) {
+        console.error('Failed to send task invitation email:', emailError);
+        // Don't fail the invitation creation if email fails
+      }
+    }
+
     // Return with details
-    const inviter = await userRepository.findOne({ where: { id: req.user!.id } });
     res.status(201).json({
       ...invitation,
       task: { id: task.id, title: task.title, orderId: task.orderId },
@@ -195,6 +241,50 @@ router.post('/:id/accept', async (req: AuthenticatedRequest, res: Response) => {
       await taskRepository.save(task);
     }
 
+    // Send email notification to inviter about acceptance
+    if (emailServiceInstance) {
+      try {
+        const userRepository = getDataSource().getRepository(UserEntity);
+        const inviter = await userRepository.findOne({ where: { id: invitation.inviterId } });
+        const invitee = await userRepository.findOne({ where: { id: invitation.inviteeId } });
+        
+        if (inviter && inviter.email && invitee) {
+          const inviteeName = `${invitee.name} ${invitee.surname}`;
+          const inviterName = `${inviter.name} ${inviter.surname}`;
+          
+          await emailServiceInstance.sendEmail(
+            inviter.email,
+            `Task Invitation Accepted: ${task?.title || 'Task'}`,
+            `
+              <html>
+                <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+                  <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+                    <div style="background-color: #f97316; padding: 20px; border-radius: 5px 5px 0 0;">
+                      <h1 style="color: white; margin: 0;">MITAS Corporation</h1>
+                    </div>
+                    <div style="background-color: #f9f9f9; padding: 20px; border: 1px solid #ddd; border-top: none;">
+                      <h2 style="color: #333; margin-top: 0;">Task Invitation Accepted</h2>
+                      <p>Dear ${inviterName},</p>
+                      <p><strong>${inviteeName}</strong> has accepted your invitation to work on the task:</p>
+                      <div style="background: white; padding: 15px; border-left: 4px solid #2ECC71; margin: 15px 0;">
+                        <h3 style="margin: 0; color: #2ECC71;">${task?.title || 'Task'}</h3>
+                      </div>
+                      <p>Best regards,<br>MITAS IPMP System</p>
+                    </div>
+                    <div style="background-color: #f5f5f5; padding: 10px; text-align: center; font-size: 12px; color: #666; border: 1px solid #ddd; border-top: none; border-radius: 0 0 5px 5px;">
+                      <p>This is an automated email from the MITAS Internal Project Management Platform.</p>
+                    </div>
+                  </div>
+                </body>
+              </html>
+            `
+          );
+        }
+      } catch (emailError) {
+        console.error('Failed to send invitation acceptance email:', emailError);
+      }
+    }
+
     res.json({ message: 'Invitation accepted', invitation });
   } catch (error) {
     console.error('Failed to accept invitation:', error);
@@ -227,6 +317,53 @@ router.post('/:id/reject', async (req: AuthenticatedRequest, res: Response) => {
     // Update invitation status
     invitation.status = InvitationStatus.REJECTED;
     await invitationRepository.save(invitation);
+
+    // Send email notification to inviter about rejection
+    if (emailServiceInstance) {
+      try {
+        const userRepository = getDataSource().getRepository(UserEntity);
+        const inviter = await userRepository.findOne({ where: { id: invitation.inviterId } });
+        const invitee = await userRepository.findOne({ where: { id: invitation.inviteeId } });
+        const taskRepository = getDataSource().getRepository(TaskEntity);
+        const task = await taskRepository.findOne({ where: { id: invitation.taskId } });
+        
+        if (inviter && inviter.email && invitee) {
+          const inviteeName = `${invitee.name} ${invitee.surname}`;
+          const inviterName = `${inviter.name} ${inviter.surname}`;
+          
+          await emailServiceInstance.sendEmail(
+            inviter.email,
+            `Task Invitation Declined: ${task?.title || 'Task'}`,
+            `
+              <html>
+                <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+                  <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+                    <div style="background-color: #f97316; padding: 20px; border-radius: 5px 5px 0 0;">
+                      <h1 style="color: white; margin: 0;">MITAS Corporation</h1>
+                    </div>
+                    <div style="background-color: #f9f9f9; padding: 20px; border: 1px solid #ddd; border-top: none;">
+                      <h2 style="color: #333; margin-top: 0;">Task Invitation Declined</h2>
+                      <p>Dear ${inviterName},</p>
+                      <p><strong>${inviteeName}</strong> has declined your invitation to work on the task:</p>
+                      <div style="background: white; padding: 15px; border-left: 4px solid #E74C3C; margin: 15px 0;">
+                        <h3 style="margin: 0; color: #E74C3C;">${task?.title || 'Task'}</h3>
+                      </div>
+                      <p>You may want to invite another team member to work on this task.</p>
+                      <p>Best regards,<br>MITAS IPMP System</p>
+                    </div>
+                    <div style="background-color: #f5f5f5; padding: 10px; text-align: center; font-size: 12px; color: #666; border: 1px solid #ddd; border-top: none; border-radius: 0 0 5px 5px;">
+                      <p>This is an automated email from the MITAS Internal Project Management Platform.</p>
+                    </div>
+                  </div>
+                </body>
+              </html>
+            `
+          );
+        }
+      } catch (emailError) {
+        console.error('Failed to send invitation rejection email:', emailError);
+      }
+    }
 
     res.json({ message: 'Invitation rejected', invitation });
   } catch (error) {

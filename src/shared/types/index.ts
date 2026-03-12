@@ -61,6 +61,7 @@ export interface Project {
   status: ProjectStatus;
   components: ComponentType[];
   assignedTeamIds: string[];
+  ownerId?: string;
   startDate?: Date;
   endDate?: Date;
   createdAt: Date;

@@ -95,9 +95,12 @@
   box-shadow: var(--shadow-strong);
   z-index: 10;
   position: relative;
-  overflow: hidden; /* Changed from visible to prevent content overflow */
+  overflow-y: auto; /* Allow vertical scrolling if needed */
+  overflow-x: visible; /* Allow fixed children to escape */
   height: 100vh; /* Ensure full height */
   max-height: 100vh; /* Prevent exceeding viewport */
+  /* Allow fixed positioned children to escape */
+  contain: layout style;
 }
 
 /* Sidebar Header */

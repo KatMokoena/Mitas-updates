@@ -17,6 +17,13 @@ import { RequisitionProofEntity } from './entities/RequisitionProof';
 import { AuditLogEntity } from './entities/AuditLog';
 import { TimeEntryEntity } from './entities/TimeEntry';
 import { CliftonStrengthsEntity } from './entities/CliftonStrengths';
+import { ProcurementDocumentEntity } from './entities/ProcurementDocument';
+import { RequisitionDocumentEntity } from './entities/RequisitionDocument';
+import { ProjectOwnershipTransferEntity } from './entities/ProjectOwnershipTransfer';
+import { ProjectOwnershipInvitationEntity } from './entities/ProjectOwnershipInvitation';
+import { OrderOwnershipTransferEntity } from './entities/OrderOwnershipTransfer';
+import { OrderOwnershipInvitationEntity } from './entities/OrderOwnershipInvitation';
+import { ProjectAnalysisEntity } from './entities/ProjectAnalysis';
 
 let AppDataSource: DataSource | null = null;
 
@@ -209,6 +216,14 @@ const runMigrations = async (queryRunner: any): Promise<void> => {
       console.log('createdBy column added to orders table successfully');
     }
 
+    // Check if orders table has completedDate column
+    const hasCompletedDate = ordersTableInfo.some((col: any) => col.name === 'completedDate');
+    if (!hasCompletedDate) {
+      console.log('Adding completedDate column to orders table...');
+      await queryRunner.query(`ALTER TABLE orders ADD COLUMN "completedDate" datetime;`);
+      console.log('completedDate column added to orders table successfully');
+    }
+
     // Check if projects table has departmentId column
     const projectsTableInfo = await queryRunner.query(`PRAGMA table_info(projects);`);
     const projectsHasDepartmentId = projectsTableInfo.some((col: any) => col.name === 'departmentId');
@@ -272,6 +287,28 @@ const runMigrations = async (queryRunner: any): Promise<void> => {
       console.log('task_invitations table created successfully');
     }
 
+    // Check if tasks table has assigned user info columns
+    const tasksTableInfo = await queryRunner.query(`PRAGMA table_info(tasks);`);
+    const hasAssignedUserName = tasksTableInfo.some((col: any) => col.name === 'assignedUserName');
+    const hasAssignedUserSurname = tasksTableInfo.some((col: any) => col.name === 'assignedUserSurname');
+    const hasAssignedUserEmail = tasksTableInfo.some((col: any) => col.name === 'assignedUserEmail');
+    
+    if (!hasAssignedUserName) {
+      console.log('Adding assignedUserName column to tasks table...');
+      await queryRunner.query(`ALTER TABLE tasks ADD COLUMN "assignedUserName" varchar;`);
+      console.log('assignedUserName column added to tasks table successfully');
+    }
+    if (!hasAssignedUserSurname) {
+      console.log('Adding assignedUserSurname column to tasks table...');
+      await queryRunner.query(`ALTER TABLE tasks ADD COLUMN "assignedUserSurname" varchar;`);
+      console.log('assignedUserSurname column added to tasks table successfully');
+    }
+    if (!hasAssignedUserEmail) {
+      console.log('Adding assignedUserEmail column to tasks table...');
+      await queryRunner.query(`ALTER TABLE tasks ADD COLUMN "assignedUserEmail" varchar;`);
+      console.log('assignedUserEmail column added to tasks table successfully');
+    }
+
     // Check if clifton_strengths table exists
     const cliftonStrengthsTable = await queryRunner.query(`
       SELECT name FROM sqlite_master
@@ -316,6 +353,108 @@ const runMigrations = async (queryRunner: any): Promise<void> => {
         )
       `);
       console.log('requisition_proofs table created successfully');
+    }
+
+    // Check if procurement_documents table exists
+    const procurementDocsTable = await queryRunner.query(`
+      SELECT name FROM sqlite_master
+      WHERE type='table' AND name='procurement_documents';
+    `);
+    
+    if (procurementDocsTable.length === 0) {
+      console.log('Creating procurement_documents table...');
+      await queryRunner.query(`
+        CREATE TABLE "procurement_documents" (
+          "id" varchar PRIMARY KEY NOT NULL,
+          "orderId" varchar NOT NULL,
+          "createdBy" varchar NOT NULL,
+          "createdByName" text,
+          "createdBySurname" text,
+          "createdByEmail" text,
+          "itemName" text NOT NULL,
+          "itemCode" text NOT NULL,
+          "itemDescription" text NOT NULL,
+          "quantity" integer NOT NULL,
+          "customerNumber" text NOT NULL,
+          "additionalCriteria" text,
+          "fileName" text NOT NULL,
+          "pdfData" blob NOT NULL,
+          "fileSize" integer NOT NULL,
+          "taggedUsers" text,
+          "taggedUserNames" text,
+          "uploadedFileName" text,
+          "uploadedFileData" blob,
+          "uploadedFileSize" integer,
+          "uploadedFileMimeType" text,
+          "createdAt" datetime NOT NULL
+        )
+      `);
+      console.log('procurement_documents table created successfully');
+    } else {
+      // Check for new columns and add them if missing
+      const procurementDocsTableInfo = await queryRunner.query(`PRAGMA table_info(procurement_documents);`);
+      const columnNames = procurementDocsTableInfo.map((col: any) => col.name);
+      
+      if (!columnNames.includes('uploadedFileName')) {
+        console.log('Adding uploadedFileName column to procurement_documents table...');
+        await queryRunner.query(`ALTER TABLE procurement_documents ADD COLUMN "uploadedFileName" text;`);
+      }
+      if (!columnNames.includes('uploadedFileData')) {
+        console.log('Adding uploadedFileData column to procurement_documents table...');
+        await queryRunner.query(`ALTER TABLE procurement_documents ADD COLUMN "uploadedFileData" blob;`);
+      }
+      if (!columnNames.includes('uploadedFileSize')) {
+        console.log('Adding uploadedFileSize column to procurement_documents table...');
+        await queryRunner.query(`ALTER TABLE procurement_documents ADD COLUMN "uploadedFileSize" integer;`);
+      }
+      if (!columnNames.includes('uploadedFileMimeType')) {
+        console.log('Adding uploadedFileMimeType column to procurement_documents table...');
+        await queryRunner.query(`ALTER TABLE procurement_documents ADD COLUMN "uploadedFileMimeType" text;`);
+      }
+      // Also check for other missing columns that might have been added later
+      if (!columnNames.includes('createdByName')) {
+        console.log('Adding createdByName column to procurement_documents table...');
+        await queryRunner.query(`ALTER TABLE procurement_documents ADD COLUMN "createdByName" text;`);
+      }
+      if (!columnNames.includes('createdBySurname')) {
+        console.log('Adding createdBySurname column to procurement_documents table...');
+        await queryRunner.query(`ALTER TABLE procurement_documents ADD COLUMN "createdBySurname" text;`);
+      }
+      if (!columnNames.includes('createdByEmail')) {
+        console.log('Adding createdByEmail column to procurement_documents table...');
+        await queryRunner.query(`ALTER TABLE procurement_documents ADD COLUMN "createdByEmail" text;`);
+      }
+      if (!columnNames.includes('taggedUserNames')) {
+        console.log('Adding taggedUserNames column to procurement_documents table...');
+        await queryRunner.query(`ALTER TABLE procurement_documents ADD COLUMN "taggedUserNames" text;`);
+      }
+    }
+
+    // Check if requisition_documents table exists
+    const requisitionDocsTable = await queryRunner.query(`
+      SELECT name FROM sqlite_master
+      WHERE type='table' AND name='requisition_documents';
+    `);
+    
+    if (requisitionDocsTable.length === 0) {
+      console.log('Creating requisition_documents table...');
+      await queryRunner.query(`
+        CREATE TABLE "requisition_documents" (
+          "id" varchar PRIMARY KEY NOT NULL,
+          "requisitionId" varchar NOT NULL,
+          "uploadedBy" varchar NOT NULL,
+          "uploadedByName" text,
+          "uploadedBySurname" text,
+          "uploadedByEmail" text,
+          "fileName" text NOT NULL,
+          "fileData" blob NOT NULL,
+          "fileSize" integer NOT NULL,
+          "mimeType" text NOT NULL,
+          "description" text,
+          "uploadedAt" datetime NOT NULL
+        )
+      `);
+      console.log('requisition_documents table created successfully');
     }
 
     // Check if users table has name and surname columns (legacy migration)
@@ -368,6 +507,42 @@ const runMigrations = async (queryRunner: any): Promise<void> => {
       await queryRunner.query(`ALTER TABLE "users_new" RENAME TO "users"`);
       console.log('User migration completed successfully');
     }
+
+    // Check if needsPasswordChange column exists
+    const usersTableInfoAfter = await queryRunner.query(`PRAGMA table_info(users);`);
+    const hasNeedsPasswordChangeColumn = usersTableInfoAfter.some((col: any) => col.name === 'needsPasswordChange');
+    
+    if (!hasNeedsPasswordChangeColumn) {
+      console.log('Adding needsPasswordChange column to users table...');
+      await queryRunner.query(`ALTER TABLE users ADD COLUMN "needsPasswordChange" boolean NOT NULL DEFAULT 0;`);
+      console.log('needsPasswordChange column added successfully');
+    }
+
+    // Check if project_analysis table exists
+    const projectAnalysisTable = await queryRunner.query(`
+      SELECT name FROM sqlite_master
+      WHERE type='table' AND name='project_analysis';
+    `);
+    
+    if (projectAnalysisTable.length === 0) {
+      console.log('Creating project_analysis table...');
+      await queryRunner.query(`
+        CREATE TABLE "project_analysis" (
+          "id" varchar PRIMARY KEY NOT NULL,
+          "orderId" varchar NOT NULL,
+          "recommendations" text NOT NULL,
+          "weaknesses" text NOT NULL,
+          "faults" text NOT NULL,
+          "mistakes" text NOT NULL,
+          "summary" text,
+          "rawData" text,
+          "analyzedBy" varchar,
+          "createdAt" datetime NOT NULL,
+          "updatedAt" datetime NOT NULL
+        )
+      `);
+      console.log('project_analysis table created successfully');
+    }
   } catch (migrationError) {
     console.warn('Migration error (will continue with synchronize):', migrationError);
   }
@@ -410,7 +585,7 @@ export const initializeDatabase = async (): Promise<void> => {
     AppDataSource = new DataSource({
       type: 'better-sqlite3',
       database: dbPath,
-      entities: [UserEntity, ProjectEntity, TaskEntity, ResourceEntity, DeliverableEntity, OrderEntity, PurchaseEntity, DepartmentEntity, ConfigurationEntity, TaskInvitationEntity, RequisitionEntity, RequisitionItemEntity, RequisitionStatusHistoryEntity, RequisitionProofEntity, AuditLogEntity, TimeEntryEntity, CliftonStrengthsEntity],
+      entities: [UserEntity, ProjectEntity, TaskEntity, ResourceEntity, DeliverableEntity, OrderEntity, PurchaseEntity, DepartmentEntity, ConfigurationEntity, TaskInvitationEntity, RequisitionEntity, RequisitionItemEntity, RequisitionStatusHistoryEntity, RequisitionProofEntity, RequisitionDocumentEntity, AuditLogEntity, TimeEntryEntity, CliftonStrengthsEntity, ProcurementDocumentEntity, ProjectOwnershipTransferEntity, ProjectOwnershipInvitationEntity, OrderOwnershipTransferEntity, OrderOwnershipInvitationEntity, ProjectAnalysisEntity],
       synchronize: true, // Auto-sync schema in development - ensures all entities match
       logging: false,
     });

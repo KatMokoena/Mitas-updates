@@ -17,8 +17,26 @@ export class TaskInvitationEntity {
   @Column('uuid')
   inviterId!: string; // User who sent the invitation
 
+  @Column({ nullable: true })
+  inviterName?: string; // Name of user who sent the invitation
+
+  @Column({ nullable: true })
+  inviterSurname?: string; // Surname of user who sent the invitation
+
+  @Column({ nullable: true })
+  inviterEmail?: string; // Email of user who sent the invitation
+
   @Column('uuid')
   inviteeId!: string; // User who is invited
+
+  @Column({ nullable: true })
+  inviteeName?: string; // Name of user who is invited
+
+  @Column({ nullable: true })
+  inviteeSurname?: string; // Surname of user who is invited
+
+  @Column({ nullable: true })
+  inviteeEmail?: string; // Email of user who is invited
 
   @Column({
     type: 'text',
@@ -35,6 +53,8 @@ export class TaskInvitationEntity {
   @UpdateDateColumn()
   updatedAt!: Date;
 }
+
+
 
 
 
