@@ -82,22 +82,7 @@ The application uses SQLite with TypeORM. The database file (`ipmp.db`) is store
 
 ## API Endpoints
 
-All API endpoints are prefixed with `/api`:
 
-- `POST /api/auth/login` - User login
-- `POST /api/auth/logout` - User logout
-- `GET /api/projects` - List all projects
-- `POST /api/projects` - Create project
-- `GET /api/projects/:id` - Get project details
-- `PUT /api/projects/:id` - Update project
-- `DELETE /api/projects/:id` - Delete project
-- `GET /api/tasks` - List all tasks
-- `POST /api/tasks` - Create task
-- `PUT /api/tasks/:id` - Update task
-- `DELETE /api/tasks/:id` - Delete task
-- `GET /api/users` - List users (Admin only)
-- `POST /api/users` - Create user (Admin only)
-- `GET /api/resources` - List resources
 
 ## Deployment
 
