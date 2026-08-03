@@ -58,10 +58,6 @@ npm start
 
 The application will be available at `http://localhost:3000`
 
-## Default Credentials
-
-- **Admin**: username: `admin`, password: `admin123`
-- **Project Manager**: username: `pm`, password: `pm123`
 
 ## Project Structure
 
