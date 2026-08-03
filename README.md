@@ -63,13 +63,13 @@ The application will be available at `http://localhost:3000`
 
 ```
 src/
-  api/           # REST API routes (Express)
-  auth/          # Authentication and permissions
-  database/      # Database entities and configuration
-  renderer/      # React UI application
-  shared/        # Shared types and utilities
-  services/      # Business logic layer
-server.ts        # Main server entry point
+  api/           
+  auth/          
+  database/      
+  renderer/      
+  shared/        
+  services/      
+server.ts        
 ```
 
 ## Database
